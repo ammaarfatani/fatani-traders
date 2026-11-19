@@ -1,0 +1,443 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  email        String     @unique
+  passwordHash String
+  fullName     String
+  role         String     @default("ADMIN")
+  isActive     Boolean    @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  sessions     Session[]
+  auditLogs    AuditLog[]
+}
+
+model Session {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String    @db.ObjectId
+  tokenHash String    @unique
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ProductCategory {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+model Product {
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  code        String?
+  categoryId  String          @db.ObjectId
+  defaultUnit String          @default("KG")
+  description String?
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  category    ProductCategory @relation(fields: [categoryId], references: [id])
+  lots        PurchaseLot[]
+  saleItems   SaleItem[]
+}
+
+model Supplier {
+  id              String                @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  companyName     String?
+  phone           String
+  alternatePhone  String?
+  address         String?
+  openingBalance  Float                 @default(0)
+  currentBalance  Float                 @default(0)
+  notes           String?
+  isActive        Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  purchases       Purchase[]
+  purchaseReturns PurchaseReturn[]
+  payments        Payment[]
+  ledgerEntries   SupplierLedgerEntry[]
+}
+
+model Customer {
+  id             String                @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  shopName       String?
+  phone          String
+  alternatePhone String?
+  address        String?
+  creditLimit    Float?
+  openingBalance Float                 @default(0)
+  currentBalance Float                 @default(0)
+  notes          String?
+  isActive       Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  sales          Sale[]
+  salesReturns   SalesReturn[]
+  payments       Payment[]
+  ledgerEntries  CustomerLedgerEntry[]
+}
+
+model FinancialAccount {
+  id                  String                 @id @default(auto()) @map("_id") @db.ObjectId
+  name                String
+  type                String
+  accountNumber       String?
+  bankName            String?
+  openingBalance      Float                  @default(0)
+  currentBalance      Float                  @default(0)
+  notes               String?
+  isActive            Boolean                @default(true)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  transactions        FinancialTransaction[]
+  payments            Payment[]
+  lotExpenses         LotExpense[]
+  operatingExpenses   Expense[]
+}
+
+model Purchase {
+  id                  String              @id @default(auto()) @map("_id") @db.ObjectId
+  purchaseNumber      String              @unique
+  supplierId          String              @db.ObjectId
+  purchaseDate        DateTime
+  invoiceRefNumber    String?
+  baseCost            Float
+  totalExpenses       Float               @default(0)
+  totalLandedCost     Float
+  paidAmount          Float               @default(0)
+  balanceAmount       Float               @default(0)
+  notes               String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  supplier            Supplier            @relation(fields: [supplierId], references: [id])
+  lots                PurchaseLot[]
+  expenses            LotExpense[]
+  paymentAllocations  PaymentAllocation[]
+  purchaseReturns     PurchaseReturn[]
+}
+
+model PurchaseLot {
+  id                String                @id @default(auto()) @map("_id") @db.ObjectId
+  lotNumber         String                @unique
+  purchaseId        String                @db.ObjectId
+  productId         String                @db.ObjectId
+  purchasedGrams    Int
+  availableGrams    Int
+  soldGrams         Int                   @default(0)
+  returnedGrams     Int                   @default(0)
+  adjustedGrams     Int                   @default(0)
+  purchaseRatePerKg Float
+  landedCostPerKg   Float
+  status            String                @default("ACTIVE")
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  purchase          Purchase              @relation(fields: [purchaseId], references: [id])
+  product           Product               @relation(fields: [productId], references: [id])
+  expenses          LotExpense[]
+  costAdjustments   CostAdjustment[]
+  saleItems         SaleItem[]
+  movements         InventoryMovement[]
+  adjustments       InventoryAdjustment[]
+  purchaseReturns   PurchaseReturn[]
+}
+
+model LotExpense {
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  purchaseId       String            @db.ObjectId
+  lotId            String            @db.ObjectId
+  category         String
+  customName       String?
+  amount           Float
+  isCapitalized    Boolean           @default(true)
+  isPaid           Boolean           @default(false)
+  paymentAccountId String?           @db.ObjectId
+  date             DateTime          @default(now())
+  notes            String?
+  createdAt        DateTime          @default(now())
+  purchase         Purchase          @relation(fields: [purchaseId], references: [id])
+  lot              PurchaseLot       @relation(fields: [lotId], references: [id])
+  paymentAccount   FinancialAccount? @relation(fields: [paymentAccountId], references: [id])
+}
+
+model CostAdjustment {
+  id                       String      @id @default(auto()) @map("_id") @db.ObjectId
+  lotId                    String      @db.ObjectId
+  previousLandedCostPerKg  Float
+  newLandedCostPerKg       Float
+  adjustmentAmount         Float
+  reason                   String
+  createdAt                DateTime    @default(now())
+  lot                      PurchaseLot @relation(fields: [lotId], references: [id])
+}
+
+model Sale {
+  id                 String              @id @default(auto()) @map("_id") @db.ObjectId
+  invoiceNumber      String              @unique
+  customerId         String              @db.ObjectId
+  invoiceDate        DateTime
+  subtotal           Float
+  discount           Float               @default(0)
+  grandTotal         Float
+  paidAmount         Float               @default(0)
+  balanceAmount      Float               @default(0)
+  totalCogs          Float               @default(0)
+  grossProfit        Float               @default(0)
+  status             String              @default("COMPLETED")
+  notes              String?
+  invoiceSnapshot    Json?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  items              SaleItem[]
+  paymentAllocations PaymentAllocation[]
+  salesReturns       SalesReturn[]
+}
+
+model SaleItem {
+  id               String            @id @default(auto()) @map("_id") @db.ObjectId
+  saleId           String            @db.ObjectId
+  lotId            String            @db.ObjectId
+  productId        String            @db.ObjectId
+  grams            Int
+  ratePerKg        Float
+  costPerKg        Float
+  lineTotal        Float
+  cogsTotal        Float
+  createdAt        DateTime          @default(now())
+  sale             Sale              @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  lot              PurchaseLot       @relation(fields: [lotId], references: [id])
+  product          Product           @relation(fields: [productId], references: [id])
+  salesReturnItems SalesReturnItem[]
+}
+
+model SalesReturn {
+  id                String            @id @default(auto()) @map("_id") @db.ObjectId
+  returnNumber      String            @unique
+  saleId            String            @db.ObjectId
+  customerId        String            @db.ObjectId
+  returnDate        DateTime
+  totalRefundAmount Float
+  totalCogsReversed Float             @default(0)
+  refundAccountId   String?           @db.ObjectId
+  notes             String?
+  createdAt         DateTime          @default(now())
+  sale              Sale              @relation(fields: [saleId], references: [id])
+  customer          Customer          @relation(fields: [customerId], references: [id])
+  items             SalesReturnItem[]
+}
+
+model SalesReturnItem {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  salesReturnId String      @db.ObjectId
+  saleItemId    String      @db.ObjectId
+  lotId         String      @db.ObjectId
+  grams         Int
+  ratePerKg     Float
+  costPerKg     Float
+  refundAmount  Float
+  isRestocked   Boolean     @default(true)
+  salesReturn   SalesReturn @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
+  saleItem      SaleItem    @relation(fields: [saleItemId], references: [id])
+}
+
+model PurchaseReturn {
+  id              String      @id @default(auto()) @map("_id") @db.ObjectId
+  returnNumber    String      @unique
+  purchaseId      String      @db.ObjectId
+  lotId           String      @db.ObjectId
+  supplierId      String      @db.ObjectId
+  returnDate      DateTime
+  grams           Int
+  ratePerKg       Float
+  totalAmount     Float
+  refundAccountId String?     @db.ObjectId
+  notes           String?
+  createdAt       DateTime    @default(now())
+  purchase        Purchase    @relation(fields: [purchaseId], references: [id])
+  lot             PurchaseLot @relation(fields: [lotId], references: [id])
+  supplier        Supplier    @relation(fields: [supplierId], references: [id])
+}
+
+model Payment {
+  id              String              @id @default(auto()) @map("_id") @db.ObjectId
+  paymentNumber   String              @unique
+  type            String
+  customerId      String?             @db.ObjectId
+  supplierId      String?             @db.ObjectId
+  accountId       String              @db.ObjectId
+  amount          Float
+  paymentDate     DateTime
+  referenceNumber String?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  customer        Customer?           @relation(fields: [customerId], references: [id])
+  supplier        Supplier?           @relation(fields: [supplierId], references: [id])
+  account         FinancialAccount    @relation(fields: [accountId], references: [id])
+  allocations     PaymentAllocation[]
+}
+
+model PaymentAllocation {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  paymentId  String    @db.ObjectId
+  saleId     String?   @db.ObjectId
+  purchaseId String?   @db.ObjectId
+  amount     Float
+  payment    Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  sale       Sale?     @relation(fields: [saleId], references: [id])
+  purchase   Purchase? @relation(fields: [purchaseId], references: [id])
+}
+
+model FinancialTransaction {
+  id            String           @id @default(auto()) @map("_id") @db.ObjectId
+  accountId     String           @db.ObjectId
+  type          String
+  amount        Float
+  balanceAfter  Float
+  referenceType String?
+  referenceId   String?
+  date          DateTime         @default(now())
+  description   String
+  createdAt     DateTime         @default(now())
+  account       FinancialAccount @relation(fields: [accountId], references: [id])
+}
+
+model ExpenseCategory {
+  id                      String    @id @default(auto()) @map("_id") @db.ObjectId
+  name                    String    @unique
+  isCapitalizableDefault  Boolean   @default(false)
+  description             String?
+  createdAt               DateTime  @default(now())
+  expenses                Expense[]
+}
+
+model Expense {
+  id            String            @id @default(auto()) @map("_id") @db.ObjectId
+  expenseNumber String            @unique
+  categoryId    String            @db.ObjectId
+  title         String
+  amount        Float
+  date          DateTime
+  accountId     String?           @db.ObjectId
+  isPaid        Boolean           @default(true)
+  notes         String?
+  createdAt     DateTime          @default(now())
+  category      ExpenseCategory   @relation(fields: [categoryId], references: [id])
+  account       FinancialAccount? @relation(fields: [accountId], references: [id])
+}
+
+model InventoryMovement {
+  id                     String      @id @default(auto()) @map("_id") @db.ObjectId
+  lotId                  String      @db.ObjectId
+  type                   String
+  gramsChange            Int
+  resultingAvailableGrams Int
+  referenceType          String
+  referenceId            String?
+  date                   DateTime    @default(now())
+  notes                  String?
+  createdAt              DateTime    @default(now())
+  lot                    PurchaseLot @relation(fields: [lotId], references: [id])
+}
+
+model InventoryAdjustment {
+  id                String      @id @default(auto()) @map("_id") @db.ObjectId
+  lotId             String      @db.ObjectId
+  gramsChange       Int
+  reason            String
+  date              DateTime    @default(now())
+  adjustedByUserId  String?     @db.ObjectId
+  notes             String?
+  createdAt         DateTime    @default(now())
+  lot               PurchaseLot @relation(fields: [lotId], references: [id])
+}
+
+model CustomerLedgerEntry {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  customerId      String   @db.ObjectId
+  date            DateTime
+  type            String
+  referenceNumber String?
+  referenceId     String?
+  description     String
+  debit           Float    @default(0)
+  credit          Float    @default(0)
+  runningBalance  Float
+  createdAt       DateTime @default(now())
+  customer        Customer @relation(fields: [customerId], references: [id])
+}
+
+model SupplierLedgerEntry {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  supplierId      String   @db.ObjectId
+  date            DateTime
+  type            String
+  referenceNumber String?
+  referenceId     String?
+  description     String
+  debit           Float    @default(0)
+  credit          Float    @default(0)
+  runningBalance  Float
+  createdAt       DateTime @default(now())
+  supplier        Supplier @relation(fields: [supplierId], references: [id])
+}
+
+model InvoiceTemplate {
+  id                   String   @id @default(auto()) @map("_id") @db.ObjectId
+  name                 String   @default("Default Template")
+  businessName         String   @default("Fatani Traders")
+  businessAddress      String?  @default("Textile Plaza, M.A. Jinnah Road, Karachi, Pakistan")
+  phone                String?  @default("+92 300 1234567")
+  email                String?  @default("info@fatanitraders.com")
+  logoUrl              String?
+  footerText           String?  @default("Thank you for your business! No claims accepted after cutting or washing.")
+  termsAndConditions   String?  @default("1. Payment is due within 15 days of invoice date.\n2. Goods once sold will only be returned in original condition within 3 days.")
+  primaryColor         String   @default("#0f172a")
+  showPreviousBalance  Boolean  @default(true)
+  showTotalOutstanding Boolean  @default(true)
+  isDefault            Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model BusinessSettings {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  businessName   String   @default("Fatani Traders")
+  tagline        String?  @default("Wholesale Fabric & Textile Trading")
+  phone          String?  @default("+92 300 1234567")
+  address        String?  @default("Karachi, Pakistan")
+  ntnOrTaxNumber String?
+  currencySymbol String   @default("PKR")
+  weightUnit     String   @default("KG")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?    @db.ObjectId
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  timestamp DateTime   @default(now())
+  user      AdminUser? @relation(fields: [userId], references: [id])
+}
