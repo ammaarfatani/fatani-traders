@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
 import MobileNavbar from './MobileNavbar';
@@ -16,22 +17,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isLoginPage = pathname === '/login';
 
   if (isLoginPage) {
-    return <main className="min-h-screen bg-slate-900">{children}</main>;
+    return <main className="min-h-screen bg-brand-ivory">{children}</main>;
   }
 
   if (isLoading && !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium text-slate-600">Loading Fatani Traders...</p>
+      <div className="min-h-screen flex items-center justify-center bg-brand-ivory">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-white p-2 shadow-lg flex items-center justify-center border border-brand-muted">
+            <Image
+              src="/logo.png"
+              alt="Fatani Fabrics Logo"
+              width={48}
+              height={48}
+              className="w-full h-full object-contain animate-pulse"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-brand-fabric border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-brand-charcoal">
+              Loading Fatani Traders ERP...
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex bg-slate-100/70">
+    <div className="min-h-screen flex bg-brand-ivory text-brand-charcoal">
       {/* Desktop Sidebar */}
       <Sidebar />
 

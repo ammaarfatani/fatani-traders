@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatPKR, formatWeight } from '@fatani/shared';
@@ -16,31 +17,31 @@ export default function PurchasesListPage() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 max-w-5xl mx-auto pb-16">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-brand-deep text-white flex items-center justify-center">
             <ShoppingCart className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Purchase Lots</h1>
-            <p className="text-xs text-slate-500">Fabric rolls & landed-cost inventory batches</p>
+            <h1 className="text-xl font-bold text-brand-charcoal tracking-tight font-sans">Purchase Lots</h1>
+            <p className="text-xs text-gray-500">Fabric rolls & landed-cost inventory batches</p>
           </div>
         </div>
 
-        <a
+        <Link
           href="/purchases/new"
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md shadow-emerald-600/20 active:scale-95 transition"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand-deep hover:bg-brand-fabric text-white font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition"
         >
           <Plus className="w-4 h-4" />
           <span>New Purchase Entry</span>
-        </a>
+        </Link>
       </div>
 
       {/* Search Filter */}
       <div className="relative">
-        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           type="text"
           value={search}
@@ -49,65 +50,66 @@ export default function PurchasesListPage() {
             setPage(1);
           }}
           placeholder="Search by purchase #, invoice ref, or supplier..."
-          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-brand-muted rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-fabric shadow-subtle text-brand-charcoal"
         />
       </div>
 
       {/* Purchases List */}
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="w-8 h-8 border-4 border-brand-fabric border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Loading Purchases...</p>
         </div>
       ) : data?.purchases?.length === 0 ? (
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
-          <p className="text-sm font-medium text-slate-500">No purchase records found.</p>
-          <a
+        <div className="bg-white p-8 rounded-2xl border border-brand-muted text-center space-y-3">
+          <p className="text-sm font-medium text-gray-500">No purchase records found.</p>
+          <Link
             href="/purchases/new"
-            className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-brand-fabric hover:text-brand-accent"
           >
             <Plus className="w-4 h-4" />
             <span>Create your first purchase batch</span>
-          </a>
+          </Link>
         </div>
       ) : (
         <div className="space-y-3">
           {data?.purchases?.map((pur: any) => {
             const lot = pur.lots?.[0];
             return (
-              <a
+              <Link
                 key={pur.id}
                 href={`/purchases/${pur.id}`}
-                className="block bg-white p-4 rounded-2xl border border-slate-200 hover:border-emerald-300 transition shadow-sm active:scale-[0.99]"
+                className="block bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted hover:border-brand-fabric/50 transition shadow-subtle active:scale-[0.99]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-slate-900">{pur.purchaseNumber}</span>
+                      <span className="font-bold text-sm text-brand-charcoal font-mono">{pur.purchaseNumber}</span>
                       {lot && (
-                        <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-mono">
+                        <span className="text-[10px] bg-brand-light text-brand-fabric border border-brand-muted px-2 py-0.5 rounded-md font-mono font-bold">
                           {lot.lotNumber}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs font-medium text-slate-700 mt-0.5 truncate">
+                    <p className="text-xs font-medium text-gray-700 mt-1 truncate">
                       {pur.supplier?.name}
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-gray-500 mt-0.5">
                       {lot?.product?.name} •{' '}
-                      <span className="font-semibold text-slate-800">
+                      <span className="font-semibold text-brand-charcoal">
                         {lot ? formatWeight(lot.purchasedGrams) : '0 KG'}
                       </span>
                     </p>
                   </div>
 
                   <div className="text-right shrink-0">
-                    <p className="text-base font-extrabold text-slate-900">
+                    <p className="text-base font-extrabold text-brand-charcoal">
                       {formatPKR(pur.totalLandedCost)}
                     </p>
-                    <p className="text-xs font-semibold text-emerald-600">
+                    <p className="text-xs font-semibold text-emerald-700">
                       {formatPKR(lot?.landedCostPerKg || 0)} / KG
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-1 flex items-center justify-end gap-1">
+                    <p className="text-[10px] text-gray-400 mt-1 flex items-center justify-end gap-1">
                       <Calendar className="w-3 h-3" />
                       <span>{new Date(pur.purchaseDate).toLocaleDateString()}</span>
                     </p>
@@ -116,15 +118,15 @@ export default function PurchasesListPage() {
 
                 {/* Additional expenses indicator */}
                 {pur.totalExpenses > 0 && (
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
                     <span>
-                      Base Cost: <strong className="text-slate-700">{formatPKR(pur.baseCost)}</strong> + Landed Expenses:{' '}
-                      <strong className="text-emerald-600">{formatPKR(pur.totalExpenses)}</strong>
+                      Base Cost: <strong className="text-gray-700">{formatPKR(pur.baseCost)}</strong> + Landed Expenses:{' '}
+                      <strong className="text-emerald-700">{formatPKR(pur.totalExpenses)}</strong>
                     </span>
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
                   </div>
                 )}
-              </a>
+              </Link>
             );
           })}
         </div>

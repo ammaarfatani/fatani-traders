@@ -520,28 +520,28 @@ export default function NewSalePage() {
         )}
 
         {/* Calculation Overview */}
-        <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-2 text-xs">
+        <div className="p-4 bg-brand-deep text-white rounded-2xl space-y-2 text-xs border border-brand-dark/40 shadow-subtle">
           <div className="flex justify-between">
-            <span className="text-slate-400">Subtotal</span>
+            <span className="text-gray-300">Subtotal</span>
             <span className="font-semibold">{formatPKR(subtotal)}</span>
           </div>
           {discount > 0 && (
-            <div className="flex justify-between text-amber-400">
+            <div className="flex justify-between text-amber-300">
               <span>Discount</span>
               <span>-{formatPKR(discount)}</span>
             </div>
           )}
-          <div className="flex justify-between text-sm font-bold border-t border-slate-800 pt-2">
+          <div className="flex justify-between text-sm font-bold border-t border-white/10 pt-2">
             <span>Invoice Grand Total</span>
-            <span className="text-emerald-400">{formatPKR(grandTotal)}</span>
+            <span className="text-emerald-300">{formatPKR(grandTotal)}</span>
           </div>
           {immediatePayment > 0 && (
-            <div className="flex justify-between text-emerald-300">
+            <div className="flex justify-between text-emerald-200">
               <span>Immediate Paid</span>
               <span>-{formatPKR(immediatePayment)}</span>
             </div>
           )}
-          <div className="flex justify-between text-sm font-bold border-t border-slate-800 pt-2 text-amber-400">
+          <div className="flex justify-between text-sm font-bold border-t border-white/10 pt-2 text-amber-300">
             <span>Remaining Invoice Balance (Credit)</span>
             <span>{formatPKR(balanceAmount)}</span>
           </div>
@@ -549,23 +549,23 @@ export default function NewSalePage() {
       </div>
 
       {/* Notes */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Invoice Notes & Delivery Details</label>
+      <div className="bg-white p-4 rounded-2xl border border-brand-muted shadow-subtle">
+        <label className="block text-xs font-semibold text-brand-charcoal mb-1.5 uppercase tracking-wider">Invoice Notes & Delivery Details</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
           placeholder="e.g. Delivered via Suzuki transport, customer verified roll weights..."
-          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+          className="w-full p-2.5 bg-brand-light border border-brand-muted rounded-xl text-sm text-brand-charcoal focus:ring-2 focus:ring-brand-fabric outline-none"
         />
       </div>
 
       {/* Sticky Save Action Bar */}
-      <div className="fixed bottom-14 lg:bottom-4 left-0 right-0 z-30 p-3 bg-white/90 backdrop-blur-md border-t border-slate-200 flex justify-end max-w-4xl mx-auto rounded-t-2xl shadow-xl">
+      <div className="fixed bottom-14 lg:bottom-4 left-0 right-0 z-30 p-3 bg-white/95 backdrop-blur-md border-t border-brand-muted flex justify-end max-w-4xl mx-auto rounded-t-2xl shadow-elevated">
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full sm:w-auto px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-600/30 transition disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full sm:w-auto px-8 py-3.5 bg-brand-deep hover:bg-brand-fabric active:scale-95 text-white font-bold text-sm rounded-xl shadow-md shadow-brand-deep/20 transition disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {isSubmitting ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

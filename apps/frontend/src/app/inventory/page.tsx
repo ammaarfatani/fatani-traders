@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatPKR, formatWeight, kgAndGramsToGrams } from '@fatani/shared';
@@ -25,8 +26,8 @@ export default function InventoryReportPage() {
   // Adjustment Form State
   const [selectedLotId, setSelectedLotId] = useState('');
   const [adjustType, setAdjustType] = useState<'deduct' | 'add'>('deduct');
-  const [adjustKg, setAdjustKg] = useState<number>(0);
-  const [adjustGrams, setAdjustGrams] = useState<number>(0);
+  const [adjustKg, setAdjustKg] = useState<number | ''>('');
+  const [adjustGrams, setAdjustGrams] = useState<number | ''>('');
   const [adjustReason, setAdjustReason] = useState('');
   const [adjustNotes, setAdjustNotes] = useState('');
   const [adjustError, setAdjustError] = useState<string | null>(null);
@@ -53,8 +54,8 @@ export default function InventoryReportPage() {
       queryClient.invalidateQueries({ queryKey: ['inventoryReportSummary'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setIsAdjustModalOpen(false);
-      setAdjustKg(0);
-      setAdjustGrams(0);
+      setAdjustKg('');
+      setAdjustGrams('');
       setAdjustReason('');
       setAdjustNotes('');
       setAdjustError(null);
@@ -77,44 +78,37 @@ export default function InventoryReportPage() {
       return;
     }
 
-    if (!adjustReason.trim() || adjustReason.trim().length < 3) {
-      setAdjustError('A detailed reason for the stock adjustment is mandatory');
-      return;
+    if (!adjustReason) {
+      setAdjustReason('Periodic physical inventory reconciliation');
     }
-
-    const finalGramsChange = adjustType === 'deduct' ? -totalGrams : totalGrams;
 
     adjustStockMutation.mutate({
       lotId: selectedLotId,
-      gramsChange: finalGramsChange,
-      reason: adjustReason,
-      date: new Date(),
+      gramsChange: adjustType === 'deduct' ? -totalGrams : totalGrams,
+      reason: adjustReason || 'Physical Audit Adjustment',
       notes: adjustNotes || undefined,
     });
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 max-w-5xl mx-auto pb-16">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-brand-deep text-white flex items-center justify-center">
             <Package className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Lot Inventory</h1>
-            <p className="text-xs text-slate-500">Fabric rolls tracked separately by purchase lot</p>
+            <h1 className="text-xl font-bold text-brand-charcoal tracking-tight font-sans">
+              Lot-Wise Fabric Inventory
+            </h1>
+            <p className="text-xs text-gray-500">Separated inventory lots, landed costs, and movements</p>
           </div>
         </div>
 
         <button
-          onClick={() => {
-            if (data?.lots && data.lots.length > 0) {
-              setSelectedLotId(data.lots[0].id);
-            }
-            setIsAdjustModalOpen(true);
-          }}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm shadow-sm active:scale-95 transition"
+          onClick={() => setIsAdjustModalOpen(true)}
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-deep hover:bg-brand-fabric text-white text-xs sm:text-sm font-semibold shadow-sm active:scale-95 transition"
         >
           <SlidersHorizontal className="w-4 h-4" />
           <span>Stock Adjustment</span>
@@ -123,23 +117,23 @@ export default function InventoryReportPage() {
 
       {/* Inventory KPI Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-xs text-slate-400 uppercase font-semibold">Total Stock in KG</span>
-          <p className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle">
+          <span className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold">Total Stock in KG</span>
+          <p className="text-xl sm:text-2xl font-extrabold text-brand-charcoal mt-1">
             {invReport ? `${invReport.totalAvailableKg.toLocaleString()} KG` : '...'}
           </p>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-xs text-slate-400 uppercase font-semibold">Inventory Valuation</span>
-          <p className="text-xl sm:text-2xl font-black text-emerald-600 mt-1">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle">
+          <span className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold">Inventory Valuation</span>
+          <p className="text-xl sm:text-2xl font-extrabold text-emerald-700 mt-1">
             {invReport ? formatPKR(invReport.totalInventoryValuation) : '...'}
           </p>
         </div>
 
-        <div className="col-span-2 sm:col-span-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-xs text-slate-400 uppercase font-semibold">Active Lots</span>
-          <p className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
+        <div className="col-span-2 sm:col-span-1 bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle">
+          <span className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold">Active Lots</span>
+          <p className="text-xl sm:text-2xl font-extrabold text-brand-charcoal mt-1">
             {invReport ? invReport.totalLots : '...'} Lots
           </p>
         </div>
@@ -148,20 +142,20 @@ export default function InventoryReportPage() {
       {/* Filters & Search */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search lot number or fabric name..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-brand-muted rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-fabric shadow-subtle text-brand-charcoal"
           />
         </div>
 
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-sm"
+          className="p-2.5 bg-white border border-brand-muted rounded-xl text-xs font-semibold text-brand-charcoal shadow-subtle outline-none"
         >
           <option value="">All Lots (Active & Depleted)</option>
           <option value="ACTIVE">Active Lots Only</option>
@@ -171,92 +165,98 @@ export default function InventoryReportPage() {
 
       {/* Lots List */}
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="w-8 h-8 border-4 border-brand-fabric border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Loading Inventory Lots...</p>
         </div>
       ) : data?.lots?.length === 0 ? (
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center">
-          <p className="text-sm font-medium text-slate-500">No inventory lots found.</p>
+        <div className="bg-white p-8 rounded-2xl border border-brand-muted text-center">
+          <p className="text-sm font-medium text-gray-500">No inventory lots found.</p>
         </div>
       ) : (
         <div className="space-y-3">
           {data?.lots?.map((lot: any) => (
-            <a
+            <Link
               key={lot.id}
               href={`/inventory/lots/${lot.id}`}
-              className="block bg-white p-4 rounded-2xl border border-slate-200 hover:border-emerald-300 transition shadow-sm active:scale-[0.99]"
+              className="block bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted hover:border-brand-fabric/50 transition shadow-subtle active:scale-[0.99]"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-slate-900">{lot.lotNumber}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                      lot.status === 'ACTIVE'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}>
+                    <span className="font-bold text-sm text-brand-charcoal font-mono">{lot.lotNumber}</span>
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        lot.status === 'ACTIVE'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
                       {lot.status}
                     </span>
                   </div>
 
-                  <p className="text-xs font-semibold text-slate-800 mt-1 truncate">
+                  <p className="text-xs font-semibold text-brand-charcoal mt-1 truncate">
                     {lot.product?.name}
                   </p>
 
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-gray-500 mt-0.5">
                     Purchased: {formatWeight(lot.purchasedGrams)} • Sold: {formatWeight(lot.soldGrams)}
                   </p>
                 </div>
 
                 <div className="text-right shrink-0">
-                  <p className="text-base font-extrabold text-slate-900">
+                  <p className="text-base font-extrabold text-brand-charcoal">
                     {formatWeight(lot.availableGrams)}
                   </p>
-                  <p className="text-xs font-semibold text-emerald-600">
+                  <p className="text-xs font-semibold text-emerald-700">
                     Cost: {formatPKR(lot.landedCostPerKg)} / KG
                   </p>
-                  <p className="text-[10px] text-slate-400 mt-1">
+                  <p className="text-[10px] text-gray-400 mt-1">
                     Value: {formatPKR(lot.inventoryValue)}
                   </p>
                 </div>
               </div>
-            </a>
+            </Link>
           ))}
         </div>
       )}
 
-      {/* Modal: Stock Adjustment with Mandatory Reason */}
+      {/* Stock Adjustment Modal */}
       {isAdjustModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="font-bold text-base text-slate-900">Inventory Stock Adjustment</h3>
-                <p className="text-xs text-slate-500">Mandatory audit trail for damages or stock counts</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-deep/70 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-brand-muted animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5 text-brand-fabric" />
+                <h3 className="font-extrabold text-base text-brand-charcoal">Stock Adjustment / Audit</h3>
               </div>
               <button
                 onClick={() => setIsAdjustModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700"
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {adjustError && (
-              <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200">
-                {adjustError}
-              </div>
-            )}
+            <form onSubmit={handleAdjustSubmit} className="space-y-4 pt-4">
+              {adjustError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
+                  {adjustError}
+                </div>
+              )}
 
-            <form onSubmit={handleAdjustSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Select Lot *</label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-brand-charcoal mb-1">
+                  Select Purchase Lot *
+                </label>
                 <select
+                  required
                   value={selectedLotId}
                   onChange={(e) => setSelectedLotId(e.target.value)}
-                  required
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-brand-muted text-xs text-brand-charcoal focus:ring-2 focus:ring-brand-fabric outline-none bg-white"
                 >
+                  <option value="">-- Choose Lot to Adjust --</option>
                   {data?.lots?.map((l: any) => (
                     <option key={l.id} value={l.id}>
                       {l.lotNumber} — {l.product?.name} (Avail: {formatWeight(l.availableGrams)})
@@ -266,100 +266,107 @@ export default function InventoryReportPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Adjustment Action *</label>
-                <div className="grid grid-cols-2 gap-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-brand-charcoal mb-1">
+                  Adjustment Type
+                </label>
+                <div className="grid grid-cols-2 gap-2 text-xs font-semibold">
                   <button
                     type="button"
                     onClick={() => setAdjustType('deduct')}
-                    className={`py-2 px-3 rounded-xl border font-bold text-xs transition ${
+                    className={`py-2 px-3 rounded-xl border transition ${
                       adjustType === 'deduct'
-                        ? 'bg-red-50 text-red-700 border-red-300'
-                        : 'border-slate-200 text-slate-600'
+                        ? 'bg-red-50 text-red-700 border-red-300 font-bold'
+                        : 'border-brand-muted text-gray-600'
                     }`}
                   >
-                    - Deduct (Damaged/Loss)
+                    Deduct (Loss/Damage)
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setAdjustType('add')}
-                    className={`py-2 px-3 rounded-xl border font-bold text-xs transition ${
+                    className={`py-2 px-3 rounded-xl border transition ${
                       adjustType === 'add'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                        : 'border-slate-200 text-slate-600'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-bold'
+                        : 'border-brand-muted text-gray-600'
                     }`}
                   >
-                    + Add (Found/Surplus)
+                    Add (Surplus Audit)
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Weight (KG) *</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-brand-charcoal mb-1">
+                    Weight in KG *
+                  </label>
                   <input
                     type="number"
-                    step="any"
                     min="0"
-                    required
+                    step="any"
                     value={adjustKg}
-                    onChange={(e) => setAdjustKg(parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                    onChange={(e) => setAdjustKg(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="e.g. 5"
+                    className="w-full px-3 py-2 rounded-xl border border-brand-muted text-sm font-bold text-brand-charcoal focus:ring-2 focus:ring-brand-fabric outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Extra Grams</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-brand-charcoal mb-1">
+                    Extra Grams (0-999)
+                  </label>
                   <input
                     type="number"
                     min="0"
                     max="999"
                     value={adjustGrams}
-                    onChange={(e) => setAdjustGrams(parseInt(e.target.value, 10) || 0)}
+                    onChange={(e) => setAdjustGrams(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="0"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                    className="w-full px-3 py-2 rounded-xl border border-brand-muted text-sm font-bold text-brand-charcoal focus:ring-2 focus:ring-brand-fabric outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Mandatory Audit Reason *
+                <label className="block text-xs font-semibold uppercase tracking-wider text-brand-charcoal mb-1">
+                  Reason for Adjustment *
                 </label>
                 <input
                   type="text"
                   required
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
-                  placeholder="e.g. Water damage during godown shifting / Weave tear inspection"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                  placeholder="e.g. Fabric stained by moisture, physical count difference"
+                  className="w-full px-3 py-2 rounded-xl border border-brand-muted text-xs text-brand-charcoal focus:ring-2 focus:ring-brand-fabric outline-none"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Notes</label>
-                <textarea
+                <label className="block text-xs font-semibold uppercase tracking-wider text-brand-charcoal mb-1">
+                  Additional Notes
+                </label>
+                <input
+                  type="text"
                   value={adjustNotes}
                   onChange={(e) => setAdjustNotes(e.target.value)}
-                  rows={2}
-                  placeholder="Additional context..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  placeholder="Optional audit details"
+                  className="w-full px-3 py-2 rounded-xl border border-brand-muted text-xs text-brand-charcoal focus:ring-2 focus:ring-brand-fabric outline-none"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-2 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAdjustModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50"
+                  className="px-4 py-2 rounded-xl border border-brand-muted text-xs font-semibold text-gray-600 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={adjustStockMutation.isPending}
-                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-brand-deep hover:bg-brand-fabric text-white text-xs font-bold shadow-sm disabled:opacity-50"
                 >
                   {adjustStockMutation.isPending ? 'Saving...' : 'Apply Stock Adjustment'}
                 </button>

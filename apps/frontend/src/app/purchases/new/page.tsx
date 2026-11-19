@@ -477,62 +477,62 @@ export default function NewPurchasePage() {
       </div>
 
       {/* Prominent Landed Cost Calculation Box (As explicitly specified in Prompt) */}
-      <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 rounded-2xl shadow-lg space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-700/80 pb-3">
+      <div className="bg-brand-deep text-white p-5 sm:p-6 rounded-2xl shadow-elevated space-y-4 border border-brand-dark/40">
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
           <div className="flex items-center gap-2">
-            <Calculator className="w-5 h-5 text-emerald-400" />
+            <Calculator className="w-5 h-5 text-brand-accent" />
             <h3 className="font-bold text-base text-white">Live Landed Cost Summary</h3>
           </div>
-          <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-semibold">
+          <span className="text-xs bg-brand-fabric/60 text-white border border-brand-accent/40 px-2.5 py-0.5 rounded-full font-semibold">
             IAS 2 Compliant
           </span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
           <div>
-            <p className="text-slate-400">Purchased Weight</p>
+            <p className="text-gray-300">Purchased Weight</p>
             <p className="text-base font-bold text-white mt-0.5">
               {calculations.purchasedKg.toLocaleString()} KG
             </p>
           </div>
 
           <div>
-            <p className="text-slate-400">Base Cost</p>
-            <p className="text-base font-bold text-slate-200 mt-0.5">
+            <p className="text-gray-300">Base Cost</p>
+            <p className="text-base font-bold text-gray-200 mt-0.5">
               {formatPKR(calculations.basePurchaseCost)}
             </p>
           </div>
 
           <div>
-            <p className="text-slate-400">Additional Expenses</p>
-            <p className="text-base font-bold text-amber-400 mt-0.5">
+            <p className="text-gray-300">Additional Expenses</p>
+            <p className="text-base font-bold text-amber-300 mt-0.5">
               +{formatPKR(calculations.totalAdditionalExpenses)}
             </p>
           </div>
 
           <div>
-            <p className="text-slate-400">Total Landed Cost</p>
-            <p className="text-base font-bold text-emerald-400 mt-0.5">
+            <p className="text-gray-300">Total Landed Cost</p>
+            <p className="text-base font-bold text-emerald-300 mt-0.5">
               {formatPKR(calculations.totalLandedCost)}
             </p>
           </div>
         </div>
 
         {/* The Key Metric: Actual Cost Per KG */}
-        <div className="pt-3 border-t border-slate-700/80 flex items-center justify-between">
+        <div className="pt-3 border-t border-white/10 flex items-center justify-between">
           <div>
-            <span className="text-xs uppercase tracking-wider text-slate-400 font-bold">
+            <span className="text-xs uppercase tracking-wider text-gray-300 font-bold">
               Actual Landed Cost per KG
             </span>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-[11px] text-gray-400 mt-0.5">
               (Total Landed Cost / Purchased Weight)
             </p>
           </div>
           <div className="text-right">
-            <span className="text-2xl sm:text-3xl font-black text-emerald-400">
+            <span className="text-2xl sm:text-3xl font-black text-emerald-300">
               {formatPKR(calculations.actualCostPerKg)}
             </span>
-            <span className="text-xs text-slate-400 ml-1">/ KG</span>
+            <span className="text-xs text-gray-400 ml-1">/ KG</span>
           </div>
         </div>
       </div>

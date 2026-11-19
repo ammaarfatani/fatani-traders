@@ -112,20 +112,20 @@ export default function ExpensesPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-brand-deep text-white flex items-center justify-center">
             <Wallet className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Operating Expenses</h1>
-            <p className="text-xs text-slate-500">Rent, utilities, staff salaries, chai & office overhead</p>
+            <h1 className="text-xl font-bold text-brand-charcoal tracking-tight font-sans">Operating Expenses</h1>
+            <p className="text-xs text-gray-500">Rent, utilities, staff salaries, chai & office overhead</p>
           </div>
         </div>
 
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md shadow-emerald-600/20 active:scale-95 transition"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand-deep hover:bg-brand-fabric text-white font-semibold text-sm shadow-sm active:scale-95 transition"
         >
           <Plus className="w-4 h-4" />
           <span>Record Expense</span>
@@ -138,8 +138,8 @@ export default function ExpensesPage() {
           onClick={() => setSelectedCategory('')}
           className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
             selectedCategory === ''
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+              ? 'bg-brand-deep text-white shadow-sm'
+              : 'bg-white text-gray-600 border border-brand-muted hover:bg-brand-light'
           }`}
         >
           All Categories
@@ -152,8 +152,8 @@ export default function ExpensesPage() {
               onClick={() => setSelectedCategory(cat.id)}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
                 selectedCategory === cat.id
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  ? 'bg-brand-deep text-white shadow-sm'
+                  : 'bg-white text-gray-600 border border-brand-muted hover:bg-brand-light'
               }`}
             >
               {cat.name}
@@ -210,16 +210,16 @@ export default function ExpensesPage() {
 
       {/* Modal: Record Operating Expense */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-deep/70 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 border border-brand-muted">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div>
-                <h3 className="font-bold text-base text-slate-900">Record Operating Expense</h3>
-                <p className="text-xs text-slate-500">Business overhead (Not capitalized into fabric inventory)</p>
+                <h3 className="font-bold text-base text-brand-charcoal">Record Operating Expense</h3>
+                <p className="text-xs text-gray-500">Business overhead (Not capitalized into fabric inventory)</p>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700"
+                className="p-1 text-gray-400 hover:text-gray-700"
               >
                 <X className="w-5 h-5" />
               </button>

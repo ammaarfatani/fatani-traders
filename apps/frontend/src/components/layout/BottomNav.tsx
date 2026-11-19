@@ -1,11 +1,12 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Users,
-  PlusCircle,
+  Plus,
   ShoppingCart,
   Menu,
 } from 'lucide-react';
@@ -16,62 +17,62 @@ export default function BottomNav({ onOpenMenu }: { onOpenMenu: () => void }) {
   const isHome = pathname === '/';
   const isKhata = pathname.startsWith('/customers');
   const isPurchases = pathname.startsWith('/purchases');
-  const isNewSale = pathname === '/sales/new';
+  const isSales = pathname.startsWith('/sales') && pathname !== '/sales/new';
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 py-1 px-3 flex justify-between items-center shadow-lg">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-brand-muted py-1 px-2 flex justify-between items-center shadow-[0_-4px_10px_rgba(0,0,0,0.04)] no-print">
       {/* Home */}
-      <a
+      <Link
         href="/"
-        className={`flex flex-col items-center justify-center flex-1 py-1 ${
-          isHome ? 'text-emerald-700 font-bold' : 'text-slate-500'
+        className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
+          isHome ? 'text-brand-fabric font-bold' : 'text-gray-500 hover:text-brand-charcoal'
         }`}
       >
         <LayoutDashboard className="w-5 h-5 mb-0.5" />
-        <span className="text-[11px]">Home</span>
-      </a>
+        <span className="text-[10px] tracking-tight">Home</span>
+      </Link>
 
       {/* Customer Khata */}
-      <a
+      <Link
         href="/customers"
-        className={`flex flex-col items-center justify-center flex-1 py-1 ${
-          isKhata ? 'text-emerald-700 font-bold' : 'text-slate-500'
+        className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
+          isKhata ? 'text-brand-fabric font-bold' : 'text-gray-500 hover:text-brand-charcoal'
         }`}
       >
         <Users className="w-5 h-5 mb-0.5" />
-        <span className="text-[11px]">Khata</span>
-      </a>
+        <span className="text-[10px] tracking-tight">Khata</span>
+      </Link>
 
       {/* Center + New Sale Action */}
       <div className="flex-1 flex justify-center -mt-5">
-        <a
+        <Link
           href="/sales/new"
-          className="w-12 h-12 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-lg shadow-emerald-600/40 active:scale-95 transition-transform"
+          className="w-12 h-12 rounded-full bg-brand-deep hover:bg-brand-fabric text-white flex items-center justify-center shadow-lg shadow-brand-deep/30 active:scale-90 transition-all border-2 border-white"
           aria-label="New Sale"
         >
-          <PlusCircle className="w-6 h-6" />
-        </a>
+          <Plus className="w-6 h-6" />
+        </Link>
       </div>
 
       {/* Purchases */}
-      <a
+      <Link
         href="/purchases"
-        className={`flex flex-col items-center justify-center flex-1 py-1 ${
-          isPurchases ? 'text-emerald-700 font-bold' : 'text-slate-500'
+        className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
+          isPurchases ? 'text-brand-fabric font-bold' : 'text-gray-500 hover:text-brand-charcoal'
         }`}
       >
         <ShoppingCart className="w-5 h-5 mb-0.5" />
-        <span className="text-[11px]">Purchases</span>
-      </a>
+        <span className="text-[10px] tracking-tight">Purchases</span>
+      </Link>
 
-      {/* Menu / Drawer Toggle */}
+      {/* Full Menu Drawer Toggle */}
       <button
-        type="button"
         onClick={onOpenMenu}
-        className="flex flex-col items-center justify-center flex-1 py-1 text-slate-500 hover:text-slate-900"
+        className="flex flex-col items-center justify-center flex-1 py-1 text-gray-500 hover:text-brand-charcoal transition-colors"
+        aria-label="Open ERP Navigation"
       >
         <Menu className="w-5 h-5 mb-0.5" />
-        <span className="text-[11px]">More</span>
+        <span className="text-[10px] tracking-tight">Menu</span>
       </button>
     </nav>
   );

@@ -137,15 +137,15 @@ export default function AccountsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsTransferModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-semibold transition"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-brand-light hover:bg-brand-muted text-brand-charcoal border border-brand-muted text-xs sm:text-sm font-semibold transition"
           >
-            <ArrowRightLeft className="w-4 h-4 text-emerald-600" />
+            <ArrowRightLeft className="w-4 h-4 text-brand-fabric" />
             <span>Internal Transfer</span>
           </button>
 
           <button
             onClick={() => setIsNewAccountModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold shadow-md shadow-emerald-600/20 active:scale-95 transition"
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-deep hover:bg-brand-fabric text-white text-xs sm:text-sm font-semibold shadow-sm active:scale-95 transition"
           >
             <Plus className="w-4 h-4" />
             <span>New Account</span>
@@ -154,18 +154,18 @@ export default function AccountsPage() {
       </div>
 
       {/* Total Liquidity Banner */}
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-5 rounded-2xl shadow-sm flex items-center justify-between">
+      <div className="bg-brand-deep text-white p-5 sm:p-6 rounded-2xl shadow-subtle border border-brand-dark/40 flex items-center justify-between">
         <div>
-          <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
+          <span className="text-xs text-brand-light/90 font-semibold uppercase tracking-wider">
             Total Business Liquidity
           </span>
-          <p className="text-2xl sm:text-3xl font-black mt-1 text-emerald-400">
+          <p className="text-2xl sm:text-3xl font-extrabold mt-1 text-emerald-300">
             {formatPKR(totalLiquidity)}
           </p>
-          <p className="text-[11px] text-slate-300 mt-1">Sum of all Cash, Bank, and Mobile Wallet balances</p>
+          <p className="text-[11px] text-gray-300 mt-1">Sum of all Cash Drawer, Bank, and Mobile Wallet balances</p>
         </div>
         <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center">
-          <Landmark className="w-6 h-6 text-emerald-400" />
+          <Landmark className="w-6 h-6 text-white" />
         </div>
       </div>
 

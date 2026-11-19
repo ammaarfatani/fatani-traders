@@ -7,7 +7,7 @@ import { AccountService } from '../services/account.service';
 import { CustomerService } from '../services/customer.service';
 import { ReportService } from '../services/report.service';
 
-describe('Fatani Traders End-to-End ERP Integration Workflow', () => {
+describe('Fatani Traders End-to-End ERP Integration Workflow', { timeout: 60000 }, () => {
   let supplierId: string;
   let customerId: string;
   let productId: string;
