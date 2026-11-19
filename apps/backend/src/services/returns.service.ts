@@ -445,4 +445,58 @@ export class ReturnsService {
 
     return result;
   }
+
+  static async getSalesReturns(page: number = 1, limit: number = 20) {
+    const skip = (page - 1) * limit;
+    const [total, items] = await Promise.all([
+      prisma.salesReturn.count(),
+      prisma.salesReturn.findMany({
+        skip,
+        take: limit,
+        orderBy: { returnDate: 'desc' },
+        include: {
+          customer: { select: { id: true, name: true, phone: true } },
+          sale: { select: { id: true, invoiceNumber: true, invoiceDate: true } },
+          items: true,
+        },
+      }),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  static async getPurchaseReturns(page: number = 1, limit: number = 20) {
+    const skip = (page - 1) * limit;
+    const [total, items] = await Promise.all([
+      prisma.purchaseReturn.count(),
+      prisma.purchaseReturn.findMany({
+        skip,
+        take: limit,
+        orderBy: { returnDate: 'desc' },
+        include: {
+          supplier: { select: { id: true, name: true, phone: true } },
+          purchase: { select: { id: true, purchaseNumber: true, purchaseDate: true } },
+          lot: { select: { id: true, lotNumber: true, product: { select: { name: true } } } },
+        },
+      }),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
 }

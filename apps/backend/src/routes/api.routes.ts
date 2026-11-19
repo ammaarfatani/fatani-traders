@@ -64,7 +64,9 @@ router.get('/payments', PaymentController.list);
 
 // Returns (Sales & Purchases)
 router.post('/returns/sales', ReturnsController.createSalesReturn);
+router.get('/returns/sales', ReturnsController.listSalesReturns);
 router.post('/returns/purchases', ReturnsController.createPurchaseReturn);
+router.get('/returns/purchases', ReturnsController.listPurchaseReturns);
 
 // Operating Expenses
 router.get('/expenses/categories', ExpenseController.listCategories);

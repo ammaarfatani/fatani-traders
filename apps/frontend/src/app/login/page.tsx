@@ -3,12 +3,13 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
-import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const [email, setEmail] = useState('admin@fatanitraders.com');
-  const [password, setPassword] = useState('Fatani@Admin2026!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -18,9 +19,9 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
+      await login(email.trim(), password);
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+      setError(err.message || 'Invalid email or password. Please verify your credentials.');
     } finally {
       setIsSubmitting(false);
     }
@@ -29,22 +30,22 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-brand-ivory flex flex-col lg:flex-row">
       {/* Desktop Left / Mobile Top: Brand Visual & Textile Imagery */}
-      <div className="relative w-full lg:w-1/2 min-h-[280px] lg:min-h-screen flex flex-col justify-between p-6 sm:p-10 lg:p-16 overflow-hidden bg-brand-deep">
+      <div className="relative w-full lg:w-1/2 min-h-[260px] lg:min-h-screen flex flex-col justify-between p-6 sm:p-10 lg:p-16 overflow-hidden bg-brand-deep">
         {/* Background Image with Dark Teal Overlay */}
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-overlay"
+          className="absolute inset-0 bg-cover bg-center opacity-25 mix-blend-overlay"
           style={{ backgroundImage: `url('/textile-hero.jpg')` }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-deep via-brand-deep/90 to-brand-deep/75" />
+        <div className="absolute inset-0 bg-gradient-to-t from-brand-deep via-brand-deep/95 to-brand-deep/80" />
 
-        {/* Top Logo & Identity */}
+        {/* Top Logo & Identity - Clean White Card for high contrast visibility */}
         <div className="relative z-10 flex items-center gap-4">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/95 p-2 shadow-xl shadow-black/20 flex items-center justify-center backdrop-blur-sm border border-white/20">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white p-2 shadow-xl shadow-black/25 flex items-center justify-center shrink-0 border border-white/40">
             <Image
               src="/logo.png"
               alt="Fatani Fabrics Logo"
-              width={64}
-              height={64}
+              width={60}
+              height={60}
               className="w-full h-full object-contain"
               priority
             />
@@ -53,8 +54,8 @@ export default function LoginPage() {
             <h1 className="text-xl sm:text-2xl font-bold tracking-wider text-white uppercase font-sans">
               FATANI TRADERS
             </h1>
-            <p className="text-xs sm:text-sm font-medium text-brand-accent tracking-widest uppercase">
-              Textile Trading & Khata ERP
+            <p className="text-xs sm:text-sm font-semibold text-brand-accent tracking-widest uppercase">
+              Textile Trading ERP
             </p>
           </div>
         </div>
@@ -62,7 +63,7 @@ export default function LoginPage() {
         {/* Middle Feature Highlights (Desktop) */}
         <div className="relative z-10 hidden lg:block my-auto max-w-lg space-y-6">
           <div className="inline-block px-3 py-1 rounded-full bg-brand-fabric/40 border border-brand-accent/30 text-xs font-semibold text-brand-light tracking-wide uppercase">
-            Specialized Wholesale Platform
+            Textile Wholesale Platform
           </div>
           <h2 className="text-3xl lg:text-4xl font-extrabold text-white leading-tight">
             Precision fabric inventory, lot-wise landed cost & instant khata.
@@ -104,7 +105,7 @@ export default function LoginPage() {
               Sign In to ERP
             </h2>
             <p className="mt-1.5 text-sm text-gray-600">
-              Enter your credentials to access inventory, sales, and accounts.
+              Enter your authorized admin credentials to access inventory, sales, and accounts.
             </p>
           </div>
 
@@ -121,7 +122,10 @@ export default function LoginPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-brand-charcoal uppercase tracking-wider mb-2">
+                <label 
+                  htmlFor="admin-email" 
+                  className="block text-xs font-semibold text-brand-charcoal uppercase tracking-wider mb-2"
+                >
                   Admin Email Address
                 </label>
                 <div className="relative">
@@ -129,18 +133,23 @@ export default function LoginPage() {
                     <Mail className="w-5 h-5" />
                   </div>
                   <input
+                    id="admin-email"
                     type="email"
                     required
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="block w-full pl-11 pr-4 py-3.5 bg-white border border-brand-muted rounded-xl text-brand-charcoal text-sm font-medium focus:ring-2 focus:ring-brand-fabric focus:border-brand-fabric outline-none transition-shadow shadow-sm"
-                    placeholder="admin@fatanitraders.com"
+                    placeholder="name@business.com"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-brand-charcoal uppercase tracking-wider mb-2">
+                <label 
+                  htmlFor="admin-password"
+                  className="block text-xs font-semibold text-brand-charcoal uppercase tracking-wider mb-2"
+                >
                   Admin Password
                 </label>
                 <div className="relative">
@@ -148,13 +157,23 @@ export default function LoginPage() {
                     <Lock className="w-5 h-5" />
                   </div>
                   <input
-                    type="password"
+                    id="admin-password"
+                    type={showPassword ? 'text' : 'password'}
                     required
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-11 pr-4 py-3.5 bg-white border border-brand-muted rounded-xl text-brand-charcoal text-sm font-medium focus:ring-2 focus:ring-brand-fabric focus:border-brand-fabric outline-none transition-shadow shadow-sm"
-                    placeholder="••••••••••••"
+                    className="block w-full pl-11 pr-11 py-3.5 bg-white border border-brand-muted rounded-xl text-brand-charcoal text-sm font-medium focus:ring-2 focus:ring-brand-fabric focus:border-brand-fabric outline-none transition-shadow shadow-sm"
+                    placeholder="Enter your password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-brand-charcoal transition-colors"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
               </div>
             </div>
@@ -174,16 +193,10 @@ export default function LoginPage() {
               )}
             </button>
 
-            {/* Quick Demo Credentials Pill */}
-            <div className="p-4 rounded-xl bg-brand-light/70 border border-brand-muted text-xs text-brand-charcoal space-y-1.5">
-              <div className="flex items-center gap-1.5 font-semibold text-brand-fabric">
-                <CheckCircle2 className="w-4 h-4 text-brand-fabric" />
-                <span>Initial Admin Seed Credentials</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-gray-600 font-mono text-[11px] pt-1">
-                <div>Email: <span className="text-brand-deep font-semibold">admin@fatanitraders.com</span></div>
-                <div>Pass: <span className="text-brand-deep font-semibold">Fatani@Admin2026!</span></div>
-              </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500">
+                Protected system &bull; Authorized personnel only
+              </p>
             </div>
           </form>
         </div>

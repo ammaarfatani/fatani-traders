@@ -15,6 +15,8 @@ export function decimalKgToGrams(kgDecimal: number): number {
   return Math.round(kgDecimal * 1000);
 }
 
+export const kgToGrams = decimalKgToGrams;
+
 export function gramsToKg(totalGrams: number): number {
   if (!totalGrams || isNaN(totalGrams)) return 0;
   return totalGrams / 1000;

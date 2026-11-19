@@ -8,12 +8,13 @@ import {
   X,
   LayoutDashboard,
   ShoppingCart,
+  Package,
   Receipt,
   Users,
   Building2,
-  Package,
+  CreditCard,
   Wallet,
-  Landmark,
+  RotateCcw,
   BarChart3,
   Settings,
   LogOut,
@@ -35,15 +36,16 @@ export default function MobileDrawer({
 
   const links = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Customer Khata', href: '/customers', icon: Users },
-    { name: 'Sales & Invoices', href: '/sales', icon: Receipt },
-    { name: 'Purchases & Lots', href: '/purchases', icon: ShoppingCart },
-    { name: 'Supplier Khata', href: '/suppliers', icon: Building2 },
-    { name: 'Lot Inventory', href: '/inventory', icon: Package },
-    { name: 'Cash & Bank (Cashbook)', href: '/accounts', icon: Landmark },
-    { name: 'Operating Expenses', href: '/expenses', icon: Wallet },
-    { name: 'Profit & Loss Reports', href: '/reports', icon: BarChart3 },
-    { name: 'Business Settings', href: '/settings', icon: Settings },
+    { name: 'Purchases', href: '/purchases', icon: ShoppingCart },
+    { name: 'Inventory', href: '/inventory', icon: Package },
+    { name: 'Sales', href: '/sales', icon: Receipt },
+    { name: 'Customers', href: '/customers', icon: Users },
+    { name: 'Suppliers', href: '/suppliers', icon: Building2 },
+    { name: 'Payments', href: '/payments', icon: CreditCard },
+    { name: 'Expenses', href: '/expenses', icon: Wallet },
+    { name: 'Returns', href: '/returns', icon: RotateCcw },
+    { name: 'Reports', href: '/reports', icon: BarChart3 },
+    { name: 'Settings', href: '/settings', icon: Settings },
   ];
 
   return (
@@ -58,7 +60,7 @@ export default function MobileDrawer({
       <div className="relative ml-auto w-4/5 max-w-xs bg-brand-deep text-white h-full flex flex-col shadow-2xl z-10 animate-in slide-in-from-right duration-200 border-l border-white/10">
         <div className="p-4 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-white p-1 shadow flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-white p-1 shadow flex items-center justify-center shrink-0">
               <Image
                 src="/logo.png"
                 alt="Fatani Fabrics Logo"
@@ -96,7 +98,7 @@ export default function MobileDrawer({
                 key={link.href}
                 href={link.href}
                 onClick={onClose}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
                   isActive
                     ? 'bg-brand-fabric text-white shadow-sm'
                     : 'text-gray-300 hover:bg-white/10 hover:text-white'

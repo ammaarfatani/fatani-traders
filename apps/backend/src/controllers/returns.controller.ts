@@ -38,4 +38,36 @@ export class ReturnsController {
       next(err);
     }
   }
+
+  static async listSalesReturns(req: Request, res: Response, next: NextFunction) {
+    try {
+      const page = parseInt(req.query.page as string, 10) || 1;
+      const limit = parseInt(req.query.limit as string, 10) || 20;
+
+      const result = await ReturnsService.getSalesReturns(page, limit);
+      return res.status(200).json({
+        success: true,
+        data: result.items,
+        pagination: result.pagination,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async listPurchaseReturns(req: Request, res: Response, next: NextFunction) {
+    try {
+      const page = parseInt(req.query.page as string, 10) || 1;
+      const limit = parseInt(req.query.limit as string, 10) || 20;
+
+      const result = await ReturnsService.getPurchaseReturns(page, limit);
+      return res.status(200).json({
+        success: true,
+        data: result.items,
+        pagination: result.pagination,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
 }
