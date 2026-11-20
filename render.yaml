@@ -3,7 +3,7 @@ services:
     name: fatani-traders-backend
     runtime: node
     plan: starter
-    buildCommand: pnpm install && pnpm run build:shared && pnpm run build:backend
+    buildCommand: pnpm install && pnpm run build:shared && pnpm run db:generate && pnpm run build:backend
     startCommand: node apps/backend/dist/server.js
     envVars:
       - key: NODE_ENV
