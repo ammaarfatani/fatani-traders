@@ -10,9 +10,13 @@ async function main() {
   console.log('Seeding Fatani Traders ERP database...');
 
   // 1. Admin User
-  const adminEmail = process.env.INITIAL_ADMIN_EMAIL || 'admin@fatanitraders.com';
-  const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || 'Fatani@Admin2026!';
-  const adminName = process.env.INITIAL_ADMIN_NAME || 'Admin Fatani';
+  const adminEmail = process.env.INITIAL_ADMIN_EMAIL || 'hammad@gmail.com';
+  const adminPassword = process.env.INITIAL_ADMIN_PASSWORD;
+  const adminName = process.env.INITIAL_ADMIN_NAME || 'Hammad Admin';
+
+  if (!adminPassword) {
+    throw new Error('INITIAL_ADMIN_PASSWORD environment variable is required to seed the admin account.');
+  }
 
   const existingAdmin = await prisma.adminUser.findUnique({
     where: { email: adminEmail },

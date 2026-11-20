@@ -30,6 +30,8 @@ model Session {
   expiresAt DateTime
   createdAt DateTime  @default(now())
   user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
 }
 
 model ProductCategory {
@@ -73,6 +75,8 @@ model Supplier {
   purchaseReturns PurchaseReturn[]
   payments        Payment[]
   ledgerEntries   SupplierLedgerEntry[]
+
+  @@index([name])
 }
 
 model Customer {
@@ -93,6 +97,8 @@ model Customer {
   salesReturns   SalesReturn[]
   payments       Payment[]
   ledgerEntries  CustomerLedgerEntry[]
+
+  @@index([name])
 }
 
 model FinancialAccount {
@@ -132,6 +138,8 @@ model Purchase {
   expenses            LotExpense[]
   paymentAllocations  PaymentAllocation[]
   purchaseReturns     PurchaseReturn[]
+
+  @@index([supplierId, purchaseDate])
 }
 
 model PurchaseLot {
@@ -157,6 +165,10 @@ model PurchaseLot {
   movements         InventoryMovement[]
   adjustments       InventoryAdjustment[]
   purchaseReturns   PurchaseReturn[]
+
+  @@index([productId, status])
+  @@index([status, availableGrams])
+  @@index([purchaseId])
 }
 
 model LotExpense {
@@ -175,6 +187,9 @@ model LotExpense {
   purchase         Purchase          @relation(fields: [purchaseId], references: [id])
   lot              PurchaseLot       @relation(fields: [lotId], references: [id])
   paymentAccount   FinancialAccount? @relation(fields: [paymentAccountId], references: [id])
+
+  @@index([lotId])
+  @@index([purchaseId])
 }
 
 model CostAdjustment {
@@ -209,6 +224,8 @@ model Sale {
   items              SaleItem[]
   paymentAllocations PaymentAllocation[]
   salesReturns       SalesReturn[]
+
+  @@index([customerId, invoiceDate])
 }
 
 model SaleItem {
@@ -226,6 +243,9 @@ model SaleItem {
   lot              PurchaseLot       @relation(fields: [lotId], references: [id])
   product          Product           @relation(fields: [productId], references: [id])
   salesReturnItems SalesReturnItem[]
+
+  @@index([saleId])
+  @@index([lotId])
 }
 
 model SalesReturn {
@@ -292,6 +312,9 @@ model Payment {
   supplier        Supplier?           @relation(fields: [supplierId], references: [id])
   account         FinancialAccount    @relation(fields: [accountId], references: [id])
   allocations     PaymentAllocation[]
+
+  @@index([customerId, paymentDate])
+  @@index([supplierId, paymentDate])
 }
 
 model PaymentAllocation {
@@ -303,6 +326,9 @@ model PaymentAllocation {
   payment    Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   sale       Sale?     @relation(fields: [saleId], references: [id])
   purchase   Purchase? @relation(fields: [purchaseId], references: [id])
+
+  @@index([paymentId])
+  @@index([saleId])
 }
 
 model FinancialTransaction {
@@ -317,6 +343,8 @@ model FinancialTransaction {
   description   String
   createdAt     DateTime         @default(now())
   account       FinancialAccount @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, date])
 }
 
 model ExpenseCategory {
@@ -341,6 +369,8 @@ model Expense {
   createdAt     DateTime          @default(now())
   category      ExpenseCategory   @relation(fields: [categoryId], references: [id])
   account       FinancialAccount? @relation(fields: [accountId], references: [id])
+
+  @@index([categoryId, date])
 }
 
 model InventoryMovement {
@@ -355,6 +385,8 @@ model InventoryMovement {
   notes                  String?
   createdAt              DateTime    @default(now())
   lot                    PurchaseLot @relation(fields: [lotId], references: [id])
+
+  @@index([lotId, date])
 }
 
 model InventoryAdjustment {
@@ -382,6 +414,8 @@ model CustomerLedgerEntry {
   runningBalance  Float
   createdAt       DateTime @default(now())
   customer        Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId, date])
 }
 
 model SupplierLedgerEntry {
@@ -397,6 +431,8 @@ model SupplierLedgerEntry {
   runningBalance  Float
   createdAt       DateTime @default(now())
   supplier        Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([supplierId, date])
 }
 
 model InvoiceTemplate {

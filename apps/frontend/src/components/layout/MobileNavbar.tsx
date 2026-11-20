@@ -25,12 +25,12 @@ export default function MobileNavbar({ onOpenMenu }: { onOpenMenu: () => void })
           </button>
         )}
         <Link href="/" className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-white p-1 shadow flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 shrink-0 flex items-center justify-center">
             <Image
               src="/logo.png"
               alt="Fatani Fabrics Logo"
-              width={32}
-              height={32}
+              width={36}
+              height={36}
               className="w-full h-full object-contain"
             />
           </div>

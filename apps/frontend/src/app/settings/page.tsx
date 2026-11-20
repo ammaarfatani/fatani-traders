@@ -215,12 +215,12 @@ export default function SettingsPage() {
         <form onSubmit={handleSaveBusiness} className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle space-y-5 text-xs">
           {/* Logo Showcase Banner */}
           <div className="p-4 rounded-2xl bg-brand-light border border-brand-muted flex flex-col sm:flex-row items-center gap-4">
-            <div className="w-20 h-20 rounded-2xl bg-white p-2 shadow-sm border border-brand-muted flex items-center justify-center shrink-0">
+            <div className="w-20 h-20 flex items-center justify-center shrink-0">
               <Image
                 src="/logo.png"
                 alt="Fatani Fabrics Logo"
-                width={70}
-                height={70}
+                width={80}
+                height={80}
                 className="w-full h-full object-contain"
               />
             </div>

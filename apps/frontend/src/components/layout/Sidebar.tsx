@@ -65,12 +65,12 @@ export default function Sidebar() {
       {/* Brand Header */}
       <div className="h-20 border-b border-white/10 flex items-center justify-between px-4 relative">
         <Link href="/" className="flex items-center gap-3 overflow-hidden">
-          <div className="w-12 h-12 rounded-xl bg-white p-1.5 shadow-md shrink-0 flex items-center justify-center">
+          <div className="w-11 h-11 shrink-0 flex items-center justify-center">
             <Image
               src="/logo.png"
               alt="Fatani Fabrics Logo"
-              width={42}
-              height={42}
+              width={44}
+              height={44}
               className="w-full h-full object-contain"
               priority
             />

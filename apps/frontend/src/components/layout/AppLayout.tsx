@@ -24,12 +24,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-brand-ivory">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-white p-2 shadow-lg flex items-center justify-center border border-brand-muted">
+          <div className="w-16 h-16 flex items-center justify-center shrink-0">
             <Image
               src="/logo.png"
               alt="Fatani Fabrics Logo"
-              width={48}
-              height={48}
+              width={56}
+              height={56}
               className="w-full h-full object-contain animate-pulse"
             />
           </div>

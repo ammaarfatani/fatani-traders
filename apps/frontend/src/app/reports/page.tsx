@@ -135,12 +135,12 @@ export default function ReportsPage() {
               {/* Header with Brand Logo */}
               <div className="border-b border-brand-muted pb-4 flex justify-between items-start">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-brand-light p-1 shadow-sm border border-brand-muted flex items-center justify-center shrink-0">
+                  <div className="w-12 h-12 flex items-center justify-center shrink-0">
                     <Image
                       src="/logo.png"
                       alt="Fatani Fabrics Logo"
-                      width={40}
-                      height={40}
+                      width={44}
+                      height={44}
                       className="w-full h-full object-contain"
                     />
                   </div>
@@ -276,12 +276,12 @@ export default function ReportsPage() {
             <div className="print-page bg-white p-6 sm:p-8 rounded-2xl border border-brand-muted shadow-subtle space-y-6">
               <div className="border-b border-brand-muted pb-4 flex justify-between items-start">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-brand-light p-1 shadow-sm border border-brand-muted flex items-center justify-center shrink-0">
+                  <div className="w-12 h-12 flex items-center justify-center shrink-0">
                     <Image
                       src="/logo.png"
                       alt="Fatani Fabrics Logo"
-                      width={40}
-                      height={40}
+                      width={44}
+                      height={44}
                       className="w-full h-full object-contain"
                     />
                   </div>

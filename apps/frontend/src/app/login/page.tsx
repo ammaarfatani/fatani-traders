@@ -38,14 +38,14 @@ export default function LoginPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-brand-deep via-brand-deep/95 to-brand-deep/80" />
 
-        {/* Top Logo & Identity - Clean White Card for high contrast visibility */}
+        {/* Top Logo & Identity */}
         <div className="relative z-10 flex items-center gap-4">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white p-2 shadow-xl shadow-black/25 flex items-center justify-center shrink-0 border border-white/40">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 flex items-center justify-center">
             <Image
               src="/logo.png"
               alt="Fatani Fabrics Logo"
-              width={60}
-              height={60}
+              width={64}
+              height={64}
               className="w-full h-full object-contain"
               priority
             />
@@ -100,6 +100,15 @@ export default function LoginPage() {
       {/* Right Form Section: Clean, Elegant, Mobile-First */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 lg:p-16">
         <div className="w-full max-w-md space-y-8">
+          <div className="lg:hidden flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 shrink-0">
+              <Image src="/logo.png" alt="Fatani Fabrics Logo" width={48} height={48} className="w-full h-full object-contain" priority />
+            </div>
+            <div>
+              <h1 className="font-bold text-lg text-brand-charcoal leading-none">FATANI TRADERS</h1>
+              <p className="text-[11px] text-brand-fabric font-semibold uppercase tracking-wider">Textile Trading ERP</p>
+            </div>
+          </div>
           <div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-brand-charcoal tracking-tight">
               Sign In to ERP

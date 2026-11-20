@@ -60,12 +60,12 @@ export default function MobileDrawer({
       <div className="relative ml-auto w-4/5 max-w-xs bg-brand-deep text-white h-full flex flex-col shadow-2xl z-10 animate-in slide-in-from-right duration-200 border-l border-white/10">
         <div className="p-4 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-white p-1 shadow flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 shrink-0 flex items-center justify-center">
               <Image
                 src="/logo.png"
                 alt="Fatani Fabrics Logo"
-                width={36}
-                height={36}
+                width={40}
+                height={40}
                 className="w-full h-full object-contain"
               />
             </div>

@@ -28,5 +28,8 @@
     "fatani-traders"
   ],
   "author": "Fatani Traders",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "sharp": "^0.35.5"
+  }
 }

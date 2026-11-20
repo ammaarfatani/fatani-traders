@@ -50,6 +50,11 @@ describe('Fatani Traders End-to-End ERP Integration Workflow', { timeout: 60000 
       cashAcc = await prisma.financialAccount.create({
         data: { name: 'Test Cash Drawer', type: 'CASH', currentBalance: 100000 },
       });
+    } else if (cashAcc.currentBalance <= 0) {
+      cashAcc = await prisma.financialAccount.update({
+        where: { id: cashAcc.id },
+        data: { currentBalance: 100000 },
+      });
     }
     cashAccountId = cashAcc.id;
 
@@ -57,6 +62,11 @@ describe('Fatani Traders End-to-End ERP Integration Workflow', { timeout: 60000 
     if (!bankAcc) {
       bankAcc = await prisma.financialAccount.create({
         data: { name: 'Test Meezan Bank', type: 'BANK', currentBalance: 500000 },
+      });
+    } else if (bankAcc.currentBalance <= 0) {
+      bankAcc = await prisma.financialAccount.update({
+        where: { id: bankAcc.id },
+        data: { currentBalance: 500000 },
       });
     }
     bankAccountId = bankAcc.id;
@@ -277,5 +287,35 @@ describe('Fatani Traders End-to-End ERP Integration Workflow', { timeout: 60000 
     expect(dashboard.totalAvailableStockGrams).toBeGreaterThan(0);
     expect(dashboard.totalInventoryValuation).toBeGreaterThan(0);
     expect(dashboard.totalCashAndBankBalance).toBeGreaterThan(0);
+  });
+
+  afterAll(async () => {
+    // Clean up all test records created during test run to maintain clean database state
+    try {
+      await prisma.salesReturnItem.deleteMany({});
+      await prisma.salesReturn.deleteMany({});
+      await prisma.purchaseReturn.deleteMany({});
+      await prisma.paymentAllocation.deleteMany({});
+      await prisma.payment.deleteMany({});
+      await prisma.saleItem.deleteMany({});
+      await prisma.sale.deleteMany({});
+      await prisma.inventoryMovement.deleteMany({});
+      await prisma.inventoryAdjustment.deleteMany({});
+      await prisma.costAdjustment.deleteMany({});
+      await prisma.lotExpense.deleteMany({});
+      await prisma.purchaseLot.deleteMany({});
+      await prisma.purchase.deleteMany({});
+      await prisma.customerLedgerEntry.deleteMany({});
+      await prisma.supplierLedgerEntry.deleteMany({});
+      await prisma.financialTransaction.deleteMany({});
+      await prisma.expense.deleteMany({});
+      await prisma.product.deleteMany({});
+      await prisma.productCategory.deleteMany({ where: { name: 'Test Category' } });
+      await prisma.customer.deleteMany({});
+      await prisma.supplier.deleteMany({});
+      await prisma.financialAccount.updateMany({ data: { currentBalance: 0 } });
+    } catch (e) {
+      console.error('Test cleanup error:', e);
+    }
   });
 });

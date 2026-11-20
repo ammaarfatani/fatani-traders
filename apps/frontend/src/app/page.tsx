@@ -40,12 +40,12 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-white p-2 shadow-card flex items-center justify-center border border-brand-muted">
+        <div className="w-14 h-14 shrink-0 flex items-center justify-center">
           <Image
             src="/logo.png"
             alt="Fatani Fabrics Logo"
-            width={40}
-            height={40}
+            width={48}
+            height={48}
             className="w-full h-full object-contain animate-pulse"
           />
         </div>
@@ -72,12 +72,12 @@ export default function DashboardPage() {
       {/* Top Welcome & Quick Actions Header */}
       <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-brand-light p-2 shadow-sm border border-brand-muted/80 shrink-0 flex items-center justify-center">
+          <div className="w-14 h-14 shrink-0 flex items-center justify-center">
             <Image
               src="/logo.png"
               alt="Fatani Fabrics Logo"
-              width={44}
-              height={44}
+              width={52}
+              height={52}
               className="w-full h-full object-contain"
             />
           </div>
