@@ -55,7 +55,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, isLoading, pathname, router]);
 
   const login = async (email: string, password: string) => {
-    const res = await api.post<{ user: User }>('/auth/login', { email, password });
+    const res = await api.post<{ user: User; token?: string }>('/auth/login', { email, password });
+    if (res.token && typeof window !== 'undefined') {
+      localStorage.setItem('fatani_auth_token', res.token);
+    }
     setUser(res.user);
     router.push('/');
   };
@@ -66,6 +69,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignore
     } finally {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('fatani_auth_token');
+      }
       setUser(null);
       router.push('/login');
     }

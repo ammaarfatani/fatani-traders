@@ -10,13 +10,9 @@ async function main() {
   console.log('--- SEEDING CLEAN PRODUCTION DATABASE FOR FATANI TRADERS ---');
 
   // 1. Single Admin User
-  const adminEmail = process.env.INITIAL_ADMIN_EMAIL || 'hammad@gmail.com';
-  const adminPassword = process.env.INITIAL_ADMIN_PASSWORD;
+  const adminEmail = (process.env.INITIAL_ADMIN_EMAIL || 'hammad@gmail.com').toLowerCase().trim();
+  const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || '12345678';
   const adminName = process.env.INITIAL_ADMIN_NAME || 'Hammad Admin';
-
-  if (!adminPassword) {
-    throw new Error('INITIAL_ADMIN_PASSWORD environment variable is required to seed the admin account.');
-  }
 
   const existingAdmin = await prisma.adminUser.findUnique({
     where: { email: adminEmail },

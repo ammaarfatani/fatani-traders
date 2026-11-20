@@ -11,9 +11,12 @@ export class ApiError extends Error {
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = endpoint.startsWith('http') ? endpoint : `/api${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
+  const token = typeof window !== 'undefined' ? localStorage.getItem('fatani_auth_token') : null;
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
 
