@@ -1,9 +1,10 @@
+
 services:
   - type: web
     name: fatani-traders-backend
     runtime: node
     plan: starter
-    buildCommand: pnpm install && pnpm run build:shared && pnpm run db:generate && pnpm run build:backend
+    buildCommand: pnpm install --frozen-lockfile && pnpm -w run build:shared && pnpm --filter ./apps/backend exec prisma generate && pnpm -w run build:backend
     startCommand: node apps/backend/dist/server.js
     envVars:
       - key: NODE_ENV
