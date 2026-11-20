@@ -46,27 +46,66 @@
   background-size: 24px 24px;
 }
 
-/* Print Styles for Invoice & Statements */
+/* Print Styles for Clean A4 Invoices & Statements */
 @media print {
-  body {
-    background: white !important;
-    color: black !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .no-print {
+  /* Suppress all navigation, sidebars, drawers, buttons, overlays, and action bars */
+  aside,
+  nav,
+  header,
+  footer,
+  button,
+  .no-print,
+  .print\:hidden,
+  [role="dialog"],
+  [role="menu"],
+  [role="tooltip"] {
     display: none !important;
   }
 
-  .print-only {
-    display: block !important;
+  html,
+  body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    font-size: 12pt;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Force standard margins and prevent browser headers */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Make invoice sheet fill printable A4 area with zero artificial borders or shadows */
+  #invoice-printable-area {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    background: #ffffff !important;
+  }
+
+  /* Keep table rows intact and avoid awkward page splits */
+  tr,
+  .avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Clean A4 Portrait margins */
   @page {
-    margin: 10mm;
-    size: auto;
+    size: A4 portrait;
+    margin: 12mm 10mm;
   }
 
   /* Thermal printer size rule */

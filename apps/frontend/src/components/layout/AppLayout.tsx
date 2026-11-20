@@ -45,20 +45,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen flex bg-brand-ivory text-brand-charcoal">
-      {/* Desktop Sidebar */}
-      <Sidebar />
+    <div className="min-h-screen flex bg-brand-ivory text-brand-charcoal print:bg-white print:p-0 print:m-0">
+      {/* Desktop Sidebar (Always hidden on print) */}
+      <div className="print:hidden no-print">
+        <Sidebar />
+      </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 pb-16 lg:pb-0">
-        <MobileNavbar onOpenMenu={() => setDrawerOpen(true)} />
+      <div className="flex-1 flex flex-col min-w-0 pb-16 lg:pb-0 print:p-0 print:m-0">
+        <div className="print:hidden no-print">
+          <MobileNavbar onOpenMenu={() => setDrawerOpen(true)} />
+        </div>
 
-        <main className="flex-1 p-3 sm:p-5 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-3 sm:p-5 lg:p-8 max-w-7xl w-full mx-auto print:p-0 print:m-0 print:max-w-none">
           {children}
         </main>
 
-        <BottomNav onOpenMenu={() => setDrawerOpen(true)} />
-        <MobileDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
+        <div className="print:hidden no-print">
+          <BottomNav onOpenMenu={() => setDrawerOpen(true)} />
+          <MobileDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
+        </div>
       </div>
     </div>
   );

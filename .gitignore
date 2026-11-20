@@ -17,4 +17,5 @@ Thumbs.db
 .mongo-data/
 backups/
 apps/backend/backups/
+*.tsbuildinfo
 
