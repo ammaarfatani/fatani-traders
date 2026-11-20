@@ -91,9 +91,6 @@ export class PurchaseService {
     const lotNumber = await this.generateLotNumber();
 
     const supplierPayment = Math.max(0, data.supplierPaymentAmount || 0);
-    if (supplierPayment > 0 && !data.paymentAccountId) {
-      throw new AppError('Payment account is required when recording immediate supplier payment', 400);
-    }
 
     if (supplierPayment > landedCost.basePurchaseCost) {
       throw new AppError('Immediate payment cannot exceed base purchase cost', 400);
@@ -200,19 +197,19 @@ export class PurchaseService {
       });
 
       // 4.5 Handle Immediate Supplier Payment
-      if (supplierPayment > 0 && data.paymentAccountId) {
-        const payAccount = await tx.financialAccount.findUnique({
-          where: { id: data.paymentAccountId },
-        });
-        if (!payAccount) {
-          throw new AppError('Payment account not found', 404);
-        }
+      if (supplierPayment > 0) {
+        const payAccount = data.paymentAccountId
+          ? await tx.financialAccount.findUnique({ where: { id: data.paymentAccountId } })
+          : await tx.financialAccount.findFirst();
 
-        const newAccBalance = roundMoney(payAccount.currentBalance - supplierPayment);
-        await tx.financialAccount.update({
-          where: { id: payAccount.id },
-          data: { currentBalance: newAccBalance },
-        });
+        let newAccBalance = 0;
+        if (payAccount) {
+          newAccBalance = roundMoney(payAccount.currentBalance - supplierPayment);
+          await tx.financialAccount.update({
+            where: { id: payAccount.id },
+            data: { currentBalance: newAccBalance },
+          });
+        }
 
         const paymentNumber = `PAY-${Date.now()}`;
         const payment = await tx.payment.create({
@@ -220,7 +217,7 @@ export class PurchaseService {
             paymentNumber,
             type: 'SUPPLIER_PAYMENT',
             supplierId: data.supplierId,
-            accountId: payAccount.id,
+            accountId: payAccount ? payAccount.id : null,
             amount: supplierPayment,
             paymentDate: new Date(data.purchaseDate),
             referenceNumber: purchaseNumber,
@@ -236,18 +233,20 @@ export class PurchaseService {
           },
         });
 
-        await tx.financialTransaction.create({
-          data: {
-            accountId: payAccount.id,
-            type: 'OUTFLOW',
-            amount: supplierPayment,
-            balanceAfter: newAccBalance,
-            referenceType: 'SUPPLIER_PAYMENT',
-            referenceId: payment.id,
-            date: new Date(data.purchaseDate),
-            description: `Payment to supplier ${supplier.name} for ${purchaseNumber}`,
-          },
-        });
+        if (payAccount) {
+          await tx.financialTransaction.create({
+            data: {
+              accountId: payAccount.id,
+              type: 'OUTFLOW',
+              amount: supplierPayment,
+              balanceAfter: newAccBalance,
+              referenceType: 'SUPPLIER_PAYMENT',
+              referenceId: payment.id,
+              date: new Date(data.purchaseDate),
+              description: `Payment to supplier ${supplier.name} for ${purchaseNumber}`,
+            },
+          });
+        }
       }
 
       // 4.6 Update Supplier Ledger & Current Balance
@@ -463,7 +462,7 @@ export class PurchaseService {
       ];
     }
 
-    const [total, purchases] = await Promise.all([
+    const [total, purchases, summaryAgg] = await Promise.all([
       prisma.purchase.count({ where }),
       prisma.purchase.findMany({
         where,
@@ -480,10 +479,20 @@ export class PurchaseService {
           expenses: true,
         },
       }),
+      prisma.purchase.aggregate({
+        where,
+        _sum: { totalLandedCost: true, paidAmount: true, balanceAmount: true, baseCost: true },
+      }),
     ]);
 
     return {
       purchases,
+      summary: {
+        totalPurchases: roundMoney(summaryAgg._sum.totalLandedCost || 0),
+        totalBaseCost: roundMoney(summaryAgg._sum.baseCost || 0),
+        totalPaid: roundMoney(summaryAgg._sum.paidAmount || 0),
+        totalBalance: roundMoney(summaryAgg._sum.balanceAmount || 0),
+      },
       pagination: {
         page,
         limit,

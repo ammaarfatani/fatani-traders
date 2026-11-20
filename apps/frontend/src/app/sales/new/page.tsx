@@ -40,7 +40,6 @@ export default function NewSalePage() {
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [discount, setDiscount] = useState<number>(0);
   const [immediatePayment, setImmediatePayment] = useState<number>(0);
-  const [paymentAccountId, setPaymentAccountId] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,11 +67,6 @@ export default function NewSalePage() {
     queryFn: () => api.get<any[]>('/inventory/lots'),
   });
 
-  const { data: accounts } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => api.get<any[]>('/accounts'),
-  });
-
   // Auto-select first customer
   React.useEffect(() => {
     if (customers && customers.length > 0 && !customerId) {
@@ -94,14 +88,6 @@ export default function NewSalePage() {
       ]);
     }
   }, [availableLots, items]);
-
-  // Auto-select first cash account
-  React.useEffect(() => {
-    if (accounts && accounts.length > 0 && !paymentAccountId) {
-      const cashAcc = accounts.find((a) => a.type === 'CASH') || accounts[0];
-      setPaymentAccountId(cashAcc.id);
-    }
-  }, [accounts, paymentAccountId]);
 
   // Selected customer details
   const selectedCustomer = useMemo(
@@ -225,7 +211,7 @@ export default function NewSalePage() {
         })),
         discount: Number(discount) || 0,
         immediatePayment: Number(immediatePayment) || 0,
-        paymentAccountId: Number(immediatePayment) > 0 ? paymentAccountId : null,
+        paymentAccountId: null,
         notes,
       };
 
@@ -501,23 +487,6 @@ export default function NewSalePage() {
             />
           </div>
         </div>
-
-        {immediatePayment > 0 && (
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Received In Account</label>
-            <select
-              value={paymentAccountId}
-              onChange={(e) => setPaymentAccountId(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900"
-            >
-              {accounts?.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.name} ({formatPKR(acc.currentBalance)})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
 
         {/* Calculation Overview */}
         <div className="p-4 bg-brand-deep text-white rounded-2xl space-y-2 text-xs border border-brand-dark/40 shadow-subtle">

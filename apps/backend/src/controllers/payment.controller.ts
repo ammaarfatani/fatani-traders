@@ -59,11 +59,13 @@ export class PaymentController {
       const page = parseInt(req.query.page as string, 10) || 1;
       const limit = parseInt(req.query.limit as string, 10) || 20;
       const type = req.query.type as string;
+      const search = req.query.search as string;
 
-      const result = await PaymentService.getPayments(page, limit, type);
+      const result = await PaymentService.getPayments(page, limit, type, search);
       return res.status(200).json({
         success: true,
         data: result.payments,
+        summary: result.summary,
         pagination: result.pagination,
       });
     } catch (err) {

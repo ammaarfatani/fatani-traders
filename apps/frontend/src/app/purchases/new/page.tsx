@@ -28,7 +28,6 @@ interface ExpenseRow {
   amount: number;
   isCapitalized: boolean;
   isPaid: boolean;
-  paymentAccountId: string;
   notes: string;
 }
 
@@ -53,7 +52,6 @@ export default function NewPurchasePage() {
       amount: 5000,
       isCapitalized: true,
       isPaid: false,
-      paymentAccountId: '',
       notes: '',
     },
     {
@@ -63,7 +61,6 @@ export default function NewPurchasePage() {
       amount: 3000,
       isCapitalized: true,
       isPaid: false,
-      paymentAccountId: '',
       notes: '',
     },
     {
@@ -73,14 +70,12 @@ export default function NewPurchasePage() {
       amount: 2000,
       isCapitalized: true,
       isPaid: false,
-      paymentAccountId: '',
       notes: '',
     },
   ]);
 
   // Immediate supplier payment
   const [supplierPaymentAmount, setSupplierPaymentAmount] = useState<number>(0);
-  const [paymentAccountId, setPaymentAccountId] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,11 +91,6 @@ export default function NewPurchasePage() {
     queryFn: () => api.get<any[]>('/products'),
   });
 
-  const { data: accounts } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => api.get<any[]>('/accounts'),
-  });
-
   // Auto-select first item when loaded
   React.useEffect(() => {
     if (suppliers && suppliers.length > 0 && !supplierId) {
@@ -113,12 +103,6 @@ export default function NewPurchasePage() {
       setProductId(products[0].id);
     }
   }, [products, productId]);
-
-  React.useEffect(() => {
-    if (accounts && accounts.length > 0 && !paymentAccountId) {
-      setPaymentAccountId(accounts[0].id);
-    }
-  }, [accounts, paymentAccountId]);
 
   // Real-time Landed Cost Recalculation
   const calculations = useMemo(() => {
@@ -145,7 +129,6 @@ export default function NewPurchasePage() {
         amount: 1000,
         isCapitalized: true,
         isPaid: false,
-        paymentAccountId: accounts?.[0]?.id || '',
         notes: '',
       },
     ]);
@@ -198,11 +181,11 @@ export default function NewPurchasePage() {
           amount: Number(e.amount),
           isCapitalized: e.isCapitalized,
           isPaid: e.isPaid,
-          paymentAccountId: e.isPaid ? e.paymentAccountId || paymentAccountId : null,
+          paymentAccountId: null,
           notes: e.notes || undefined,
         })),
         supplierPaymentAmount: Number(supplierPaymentAmount) || 0,
-        paymentAccountId: Number(supplierPaymentAmount) > 0 ? paymentAccountId : null,
+        paymentAccountId: null,
         notes,
       };
 
@@ -452,23 +435,6 @@ export default function NewPurchasePage() {
                     />
                     <span className="text-slate-700 font-medium">Already paid now</span>
                   </label>
-
-                  {exp.isPaid && (
-                    <div className="flex-1 flex items-center gap-2">
-                      <span className="text-slate-500 text-[11px]">Paid From:</span>
-                      <select
-                        value={exp.paymentAccountId}
-                        onChange={(e) => updateExpenseRow(exp.id, { paymentAccountId: e.target.value })}
-                        className="p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium"
-                      >
-                        {accounts?.map((acc) => (
-                          <option key={acc.id} value={acc.id}>
-                            {acc.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
                 </div>
               </div>
             ))}
@@ -558,22 +524,6 @@ export default function NewPurchasePage() {
               placeholder="0"
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900"
             />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Payment Account</label>
-            <select
-              value={paymentAccountId}
-              onChange={(e) => setPaymentAccountId(e.target.value)}
-              disabled={supplierPaymentAmount <= 0}
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 disabled:opacity-50"
-            >
-              {accounts?.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.name} (Balance: {formatPKR(acc.currentBalance)})
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 

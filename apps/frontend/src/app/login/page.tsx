@@ -114,7 +114,7 @@ export default function LoginPage() {
               Sign In to ERP
             </h2>
             <p className="mt-1.5 text-sm text-gray-600">
-              Enter your authorized admin credentials to access inventory, sales, and accounts.
+              Enter your authorized admin credentials to access inventory, sales, and payments.
             </p>
           </div>
 

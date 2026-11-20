@@ -122,7 +122,7 @@ export const PaymentCreateSchema = z.object({
   type: z.enum(['CUSTOMER_PAYMENT', 'SUPPLIER_PAYMENT']),
   customerId: z.string().optional().nullable(),
   supplierId: z.string().optional().nullable(),
-  accountId: z.string().min(1, 'Cash or Bank account is required'),
+  accountId: z.string().optional().nullable(),
   amount: z.number().positive('Payment amount must be greater than 0'),
   paymentDate: z.string().or(z.date()),
   referenceNumber: z.string().optional(),

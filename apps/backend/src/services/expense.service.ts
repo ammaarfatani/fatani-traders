@@ -62,8 +62,11 @@ export class ExpenseService {
     }
 
     const isPaid = data.isPaid !== false;
-    if (isPaid && !data.accountId) {
-      throw new AppError('Payment account is required for paid expense', 400);
+    let account = null;
+    if (isPaid) {
+      account = data.accountId
+        ? await prisma.financialAccount.findUnique({ where: { id: data.accountId } })
+        : await prisma.financialAccount.findFirst();
     }
 
     const expenseNumber = await this.generateExpenseNumber();
@@ -76,20 +79,13 @@ export class ExpenseService {
           title: data.title.trim(),
           amount: data.amount,
           date: new Date(data.date),
-          accountId: data.accountId || null,
+          accountId: account?.id || null,
           isPaid,
           notes: data.notes,
         },
       });
 
-      if (isPaid && data.accountId) {
-        const account = await tx.financialAccount.findUnique({
-          where: { id: data.accountId },
-        });
-        if (!account) {
-          throw new AppError('Payment account not found', 404);
-        }
-
+      if (isPaid && account) {
         const newBal = roundMoney(account.currentBalance - data.amount);
         await tx.financialAccount.update({
           where: { id: account.id },

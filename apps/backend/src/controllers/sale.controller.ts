@@ -31,6 +31,7 @@ export class SaleController {
       return res.status(200).json({
         success: true,
         data: result.sales,
+        summary: result.summary,
         pagination: result.pagination,
       });
     } catch (err) {

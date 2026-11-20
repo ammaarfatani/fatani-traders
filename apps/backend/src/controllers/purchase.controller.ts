@@ -51,6 +51,7 @@ export class PurchaseController {
       return res.status(200).json({
         success: true,
         data: result.purchases,
+        summary: result.summary,
         pagination: result.pagination,
       });
     } catch (err) {

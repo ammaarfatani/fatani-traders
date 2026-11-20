@@ -60,9 +60,6 @@ export class ReturnsService {
     }
 
     const immediateRefund = Math.max(0, data.refundAmount || 0);
-    if (immediateRefund > 0 && !data.refundAccountId) {
-      throw new AppError('Refund financial account is required for cash refund', 400);
-    }
 
     const returnNumber = await this.generateSalesReturnNumber();
 
@@ -208,10 +205,10 @@ export class ReturnsService {
       });
 
       // If immediate cash refund was paid to customer
-      if (immediateRefund > 0 && data.refundAccountId) {
-        const refundAccount = await tx.financialAccount.findUnique({
-          where: { id: data.refundAccountId },
-        });
+      if (immediateRefund > 0) {
+        const refundAccount = data.refundAccountId
+          ? await tx.financialAccount.findUnique({ where: { id: data.refundAccountId } })
+          : await tx.financialAccount.findFirst();
         if (refundAccount) {
           const newAccBal = roundMoney(refundAccount.currentBalance - immediateRefund);
           await tx.financialAccount.update({
@@ -377,10 +374,10 @@ export class ReturnsService {
       });
 
       // If cash refund received immediately from supplier
-      if (cashRefund > 0 && data.refundAccountId) {
-        const account = await tx.financialAccount.findUnique({
-          where: { id: data.refundAccountId },
-        });
+      if (cashRefund > 0) {
+        const account = data.refundAccountId
+          ? await tx.financialAccount.findUnique({ where: { id: data.refundAccountId } })
+          : await tx.financialAccount.findFirst();
         if (account) {
           const newAccBal = roundMoney(account.currentBalance + cashRefund);
           await tx.financialAccount.update({

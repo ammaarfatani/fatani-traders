@@ -46,7 +46,6 @@ export default function ReturnsPage() {
     }>
   >([]);
   const [salesReturnRefundAmount, setSalesReturnRefundAmount] = useState<number | ''>('');
-  const [salesReturnAccountId, setSalesReturnAccountId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
   // Purchase Return Form State
@@ -55,7 +54,6 @@ export default function ReturnsPage() {
   const [purchaseReturnKg, setPurchaseReturnKg] = useState<number | ''>('');
   const [purchaseReturnRate, setPurchaseReturnRate] = useState<number | ''>('');
   const [purchaseReturnNotes, setPurchaseReturnNotes] = useState('');
-  const [purchaseReturnRefundAccountId, setPurchaseReturnRefundAccountId] = useState('');
   const [purchaseReturnImmediateRefund, setPurchaseReturnImmediateRefund] = useState<number | ''>('');
 
   // Queries
@@ -81,14 +79,8 @@ export default function ReturnsPage() {
     enabled: isPurchaseReturnModalOpen,
   });
 
-  const { data: accountsList } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => api.get<any[]>('/accounts'),
-  });
-
   const salesReturns = salesReturnsData?.data || [];
   const purchaseReturns = purchaseReturnsData?.data || [];
-  const accounts = accountsList || [];
 
   // When sale is selected in modal, load its items
   const handleSelectSale = async (saleId: string) => {
@@ -155,7 +147,6 @@ export default function ReturnsPage() {
     setSalesReturnNotes('');
     setSalesReturnItems([]);
     setSalesReturnRefundAmount('');
-    setSalesReturnAccountId('');
     setFormError(null);
   };
 
@@ -165,7 +156,6 @@ export default function ReturnsPage() {
     setPurchaseReturnKg('');
     setPurchaseReturnRate('');
     setPurchaseReturnNotes('');
-    setPurchaseReturnRefundAccountId('');
     setPurchaseReturnImmediateRefund('');
     setFormError(null);
   };
@@ -200,7 +190,7 @@ export default function ReturnsPage() {
       returnDate: new Date(salesReturnDate).toISOString(),
       items: itemsToReturn,
       refundAmount: salesReturnRefundAmount ? Number(salesReturnRefundAmount) : 0,
-      refundAccountId: salesReturnAccountId || null,
+      refundAccountId: null,
       notes: salesReturnNotes || undefined,
     });
   };
@@ -230,7 +220,7 @@ export default function ReturnsPage() {
       grams: kgToGrams(Number(purchaseReturnKg)),
       ratePerKg: purchaseReturnRate ? Number(purchaseReturnRate) : chosenLot.purchaseRatePerKg,
       refundAmount: purchaseReturnImmediateRefund ? Number(purchaseReturnImmediateRefund) : 0,
-      refundAccountId: purchaseReturnRefundAccountId || null,
+      refundAccountId: null,
       notes: purchaseReturnNotes || undefined,
     });
   };
@@ -615,43 +605,20 @@ export default function ReturnsPage() {
               )}
 
               {/* Immediate Cash Refund (Optional) */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <div>
-                  <label className="block text-xs font-semibold text-brand-charcoal uppercase tracking-wider mb-1">
-                    Cash Refunded (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={salesReturnRefundAmount}
-                    onChange={(e) =>
-                      setSalesReturnRefundAmount(e.target.value === '' ? '' : Number(e.target.value))
-                    }
-                    placeholder="Leave 0 for Khata credit"
-                    className="w-full px-3 py-2 bg-brand-ivory border border-brand-muted rounded-xl text-xs font-bold text-brand-charcoal focus:ring-1 focus:ring-brand-fabric outline-none"
-                  />
-                </div>
-
-                {Number(salesReturnRefundAmount) > 0 && (
-                  <div>
-                    <label className="block text-xs font-semibold text-brand-charcoal uppercase tracking-wider mb-1">
-                      Refund Account *
-                    </label>
-                    <select
-                      required
-                      value={salesReturnAccountId}
-                      onChange={(e) => setSalesReturnAccountId(e.target.value)}
-                      className="w-full px-3 py-2 bg-brand-ivory border border-brand-muted rounded-xl text-xs font-medium text-brand-charcoal focus:ring-1 focus:ring-brand-fabric outline-none"
-                    >
-                      <option value="">Select Account...</option>
-                      {accounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} ({a.type})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+              <div className="pt-2">
+                <label className="block text-xs font-semibold text-brand-charcoal uppercase tracking-wider mb-1">
+                  Cash Refunded (Optional)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={salesReturnRefundAmount}
+                  onChange={(e) =>
+                    setSalesReturnRefundAmount(e.target.value === '' ? '' : Number(e.target.value))
+                  }
+                  placeholder="Leave 0 for Khata credit"
+                  className="w-full px-3 py-2 bg-brand-ivory border border-brand-muted rounded-xl text-xs font-bold text-brand-charcoal focus:ring-1 focus:ring-brand-fabric outline-none"
+                />
               </div>
 
               <div>

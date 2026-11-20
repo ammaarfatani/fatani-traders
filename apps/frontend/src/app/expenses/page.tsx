@@ -24,7 +24,6 @@ export default function ExpensesPage() {
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState<number>(0);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [accountId, setAccountId] = useState('');
   const [isPaid, setIsPaid] = useState(true);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -44,23 +43,12 @@ export default function ExpensesPage() {
     queryFn: () => api.get<any[]>('/expenses/categories'),
   });
 
-  const { data: accounts } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => api.get<any[]>('/accounts'),
-  });
-
   React.useEffect(() => {
     if (categories && categories.length > 0 && !categoryId) {
       const defaultOp = categories.find((c) => !c.isCapitalizableDefault) || categories[0];
       setCategoryId(defaultOp.id);
     }
   }, [categories, categoryId]);
-
-  React.useEffect(() => {
-    if (accounts && accounts.length > 0 && !accountId) {
-      setAccountId(accounts[0].id);
-    }
-  }, [accounts, accountId]);
 
   const createExpenseMutation = useMutation({
     mutationFn: (payload: any) => api.post('/expenses', payload),
@@ -93,17 +81,13 @@ export default function ExpensesPage() {
       setError('Please select an expense category');
       return;
     }
-    if (isPaid && !accountId) {
-      setError('Please select a payment account');
-      return;
-    }
 
     createExpenseMutation.mutate({
       title,
       categoryId,
       amount: Number(amount),
       date,
-      accountId: isPaid ? accountId : null,
+      accountId: null,
       isPaid,
       notes: notes || undefined,
     });
@@ -293,23 +277,6 @@ export default function ExpensesPage() {
                   />
                   <span className="font-semibold text-slate-800">Paid immediately</span>
                 </label>
-
-                {isPaid && (
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Paid From Account</label>
-                    <select
-                      value={accountId}
-                      onChange={(e) => setAccountId(e.target.value)}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium"
-                    >
-                      {accounts?.map((acc) => (
-                        <option key={acc.id} value={acc.id}>
-                          {acc.name} ({formatPKR(acc.currentBalance)})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
               </div>
 
               <div>

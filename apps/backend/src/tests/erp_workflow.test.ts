@@ -286,7 +286,7 @@ describe('Fatani Traders End-to-End ERP Integration Workflow', { timeout: 60000 
     const dashboard = await ReportService.getDashboard();
     expect(dashboard.totalAvailableStockGrams).toBeGreaterThan(0);
     expect(dashboard.totalInventoryValuation).toBeGreaterThan(0);
-    expect(dashboard.totalCashAndBankBalance).toBeGreaterThan(0);
+    expect(dashboard.totalPaymentsReceived).toBeGreaterThan(0);
   });
 
   afterAll(async () => {

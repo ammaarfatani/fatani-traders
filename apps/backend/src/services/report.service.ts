@@ -100,31 +100,78 @@ export class ReportService {
     const monthOperatingExpenses = roundMoney(monthExpenses._sum.amount || 0);
     const monthNetProfit = roundMoney(monthGrossProfit - monthOperatingExpenses);
 
-    // 6. Cash and Bank Balances
-    const accounts = await prisma.financialAccount.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, type: true, currentBalance: true },
-    });
-    const totalCashAndBankBalance = roundMoney(
-      accounts.reduce((sum, a) => sum + a.currentBalance, 0)
-    );
+    // 6. All-Time Totals: Purchases, Sales, Payments Received, Payments Paid
+    const [allPurchasesAgg, allSalesAgg, allReceivedAgg, allPaidAgg] = await Promise.all([
+      prisma.purchase.aggregate({
+        _sum: { totalLandedCost: true },
+      }),
+      prisma.sale.aggregate({
+        _sum: { grandTotal: true },
+      }),
+      prisma.payment.aggregate({
+        where: { type: 'CUSTOMER_PAYMENT' },
+        _sum: { amount: true },
+      }),
+      prisma.payment.aggregate({
+        where: { type: 'SUPPLIER_PAYMENT' },
+        _sum: { amount: true },
+      }),
+    ]);
 
-    // 7. Recent Sales & Purchases
-    const [recentSales, recentPurchases, overdueCustomers, lowStockLots] = await Promise.all([
+    const totalPurchases = roundMoney(allPurchasesAgg._sum.totalLandedCost || 0);
+    const totalSales = roundMoney(allSalesAgg._sum.grandTotal || 0);
+    const totalPaymentsReceived = roundMoney(allReceivedAgg._sum.amount || 0);
+    const totalPaymentsPaid = roundMoney(allPaidAgg._sum.amount || 0);
+
+    // 7. Recent Transactions: Sales, Purchases, Payments Received, Payments Paid
+    const [
+      recentSales,
+      recentPurchases,
+      recentPaymentsReceived,
+      recentPaymentsPaid,
+      overdueCustomers,
+      lowStockLots,
+    ] = await Promise.all([
       prisma.sale.findMany({
         take: 5,
         orderBy: { invoiceDate: 'desc' },
         include: {
-          customer: { select: { name: true, phone: true } },
-          items: { include: { product: { select: { name: true } } } },
+          customer: { select: { id: true, name: true, phone: true } },
+          items: { include: { product: { select: { name: true } }, lot: { select: { lotNumber: true } } } },
         },
       }),
       prisma.purchase.findMany({
         take: 5,
         orderBy: { purchaseDate: 'desc' },
         include: {
-          supplier: { select: { name: true } },
+          supplier: { select: { id: true, name: true } },
           lots: { include: { product: { select: { name: true } } } },
+        },
+      }),
+      prisma.payment.findMany({
+        where: { type: 'CUSTOMER_PAYMENT' },
+        take: 5,
+        orderBy: { paymentDate: 'desc' },
+        include: {
+          customer: { select: { id: true, name: true } },
+          allocations: {
+            include: {
+              sale: { select: { id: true, invoiceNumber: true } },
+            },
+          },
+        },
+      }),
+      prisma.payment.findMany({
+        where: { type: 'SUPPLIER_PAYMENT' },
+        take: 5,
+        orderBy: { paymentDate: 'desc' },
+        include: {
+          supplier: { select: { id: true, name: true } },
+          allocations: {
+            include: {
+              purchase: { select: { id: true, purchaseNumber: true } },
+            },
+          },
         },
       }),
       prisma.customer.findMany({
@@ -177,6 +224,10 @@ export class ReportService {
     }
 
     return {
+      totalPurchases,
+      totalSales,
+      totalPaymentsReceived,
+      totalPaymentsPaid,
       todaySales: todaySalesAmount,
       todaySalesKg: gramsToKg(todaySalesGrams),
       todayPaymentsReceived,
@@ -188,10 +239,10 @@ export class ReportService {
       monthGrossProfit,
       monthNetProfit,
       monthOperatingExpenses,
-      totalCashAndBankBalance,
-      accounts,
       recentSales,
       recentPurchases,
+      recentPaymentsReceived,
+      recentPaymentsPaid,
       overdueCustomers,
       lowStockLots: lowStockLots.map((l) => ({
         ...l,

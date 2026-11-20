@@ -19,7 +19,7 @@ export class PaymentService {
 
   static async recordCustomerPayment(data: {
     customerId: string;
-    accountId: string;
+    accountId?: string | null;
     amount: number;
     paymentDate: string | Date;
     referenceNumber?: string;
@@ -38,12 +38,9 @@ export class PaymentService {
       throw new AppError('Customer not found', 404);
     }
 
-    const account = await prisma.financialAccount.findUnique({
-      where: { id: data.accountId },
-    });
-    if (!account) {
-      throw new AppError('Financial account not found', 404);
-    }
+    const account = data.accountId
+      ? await prisma.financialAccount.findUnique({ where: { id: data.accountId } })
+      : await prisma.financialAccount.findFirst();
 
     const paymentNumber = await this.generatePaymentNumber();
 
@@ -54,7 +51,7 @@ export class PaymentService {
           paymentNumber,
           type: 'CUSTOMER_PAYMENT',
           customerId: customer.id,
-          accountId: account.id,
+          accountId: account ? account.id : null,
           amount: data.amount,
           paymentDate: new Date(data.paymentDate),
           referenceNumber: data.referenceNumber,
@@ -62,25 +59,28 @@ export class PaymentService {
         },
       });
 
-      // 2. Inflow into Financial Account
-      const newAccBalance = roundMoney(account.currentBalance + data.amount);
-      await tx.financialAccount.update({
-        where: { id: account.id },
-        data: { currentBalance: newAccBalance },
-      });
+      // 2. Inflow into Financial Account if one exists
+      let newAccBalance = 0;
+      if (account) {
+        newAccBalance = roundMoney(account.currentBalance + data.amount);
+        await tx.financialAccount.update({
+          where: { id: account.id },
+          data: { currentBalance: newAccBalance },
+        });
 
-      await tx.financialTransaction.create({
-        data: {
-          accountId: account.id,
-          type: 'INFLOW',
-          amount: data.amount,
-          balanceAfter: newAccBalance,
-          referenceType: 'CUSTOMER_PAYMENT',
-          referenceId: payment.id,
-          date: new Date(data.paymentDate),
-          description: `Payment received from customer ${customer.name}`,
-        },
-      });
+        await tx.financialTransaction.create({
+          data: {
+            accountId: account.id,
+            type: 'INFLOW',
+            amount: data.amount,
+            balanceAfter: newAccBalance,
+            referenceType: 'CUSTOMER_PAYMENT',
+            referenceId: payment.id,
+            date: new Date(data.paymentDate),
+            description: `Payment received from customer ${customer.name}`,
+          },
+        });
+      }
 
       // 3. Invoice Allocations (Specific or FIFO)
       let unallocated = data.amount;
@@ -162,7 +162,7 @@ export class PaymentService {
           type: 'PAYMENT',
           referenceNumber: paymentNumber,
           referenceId: payment.id,
-          description: data.notes || `Payment received (${account.name})`,
+          description: data.notes || (account ? `Payment received (${account.name})` : 'Payment received'),
           debit: 0,
           credit: data.amount,
           runningBalance: newCustomerBalance,
@@ -191,7 +191,7 @@ export class PaymentService {
         paymentNumber,
         customerId: customer.id,
         amount: data.amount,
-        account: account.name,
+        account: account?.name || 'Direct',
       }
     );
 
@@ -200,7 +200,7 @@ export class PaymentService {
 
   static async recordSupplierPayment(data: {
     supplierId: string;
-    accountId: string;
+    accountId?: string | null;
     amount: number;
     paymentDate: string | Date;
     referenceNumber?: string;
@@ -219,12 +219,9 @@ export class PaymentService {
       throw new AppError('Supplier not found', 404);
     }
 
-    const account = await prisma.financialAccount.findUnique({
-      where: { id: data.accountId },
-    });
-    if (!account) {
-      throw new AppError('Financial account not found', 404);
-    }
+    const account = data.accountId
+      ? await prisma.financialAccount.findUnique({ where: { id: data.accountId } })
+      : await prisma.financialAccount.findFirst();
 
     const paymentNumber = await this.generatePaymentNumber();
 
@@ -235,7 +232,7 @@ export class PaymentService {
           paymentNumber,
           type: 'SUPPLIER_PAYMENT',
           supplierId: supplier.id,
-          accountId: account.id,
+          accountId: account ? account.id : null,
           amount: data.amount,
           paymentDate: new Date(data.paymentDate),
           referenceNumber: data.referenceNumber,
@@ -243,25 +240,28 @@ export class PaymentService {
         },
       });
 
-      // 2. Outflow from Financial Account
-      const newAccBalance = roundMoney(account.currentBalance - data.amount);
-      await tx.financialAccount.update({
-        where: { id: account.id },
-        data: { currentBalance: newAccBalance },
-      });
+      // 2. Outflow from Financial Account if one exists
+      let newAccBalance = 0;
+      if (account) {
+        newAccBalance = roundMoney(account.currentBalance - data.amount);
+        await tx.financialAccount.update({
+          where: { id: account.id },
+          data: { currentBalance: newAccBalance },
+        });
 
-      await tx.financialTransaction.create({
-        data: {
-          accountId: account.id,
-          type: 'OUTFLOW',
-          amount: data.amount,
-          balanceAfter: newAccBalance,
-          referenceType: 'SUPPLIER_PAYMENT',
-          referenceId: payment.id,
-          date: new Date(data.paymentDate),
-          description: `Payment to supplier ${supplier.name}`,
-        },
-      });
+        await tx.financialTransaction.create({
+          data: {
+            accountId: account.id,
+            type: 'OUTFLOW',
+            amount: data.amount,
+            balanceAfter: newAccBalance,
+            referenceType: 'SUPPLIER_PAYMENT',
+            referenceId: payment.id,
+            date: new Date(data.paymentDate),
+            description: `Payment to supplier ${supplier.name}`,
+          },
+        });
+      }
 
       // 3. Purchase Allocations (Specific or FIFO)
       let unallocated = data.amount;
@@ -339,7 +339,7 @@ export class PaymentService {
           type: 'PAYMENT',
           referenceNumber: paymentNumber,
           referenceId: payment.id,
-          description: data.notes || `Payment made via ${account.name}`,
+          description: data.notes || (account ? `Payment made via ${account.name}` : 'Supplier payment'),
           debit: data.amount,
           credit: 0,
           runningBalance: newSupplierBalance,
@@ -368,19 +368,28 @@ export class PaymentService {
         paymentNumber,
         supplierId: supplier.id,
         amount: data.amount,
-        account: account.name,
+        account: account?.name || 'Direct',
       }
     );
 
     return result;
   }
 
-  static async getPayments(page: number = 1, limit: number = 20, type?: string) {
+  static async getPayments(page: number = 1, limit: number = 20, type?: string, search?: string) {
     const skip = (page - 1) * limit;
     const where: any = {};
-    if (type) where.type = type;
+    if (type && type !== 'ALL') where.type = type;
 
-    const [total, payments] = await Promise.all([
+    if (search) {
+      where.OR = [
+        { paymentNumber: { contains: search, mode: 'insensitive' } },
+        { referenceNumber: { contains: search, mode: 'insensitive' } },
+        { customer: { name: { contains: search, mode: 'insensitive' } } },
+        { supplier: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [total, payments, receivedAgg, paidAgg] = await Promise.all([
       prisma.payment.count({ where }),
       prisma.payment.findMany({
         where,
@@ -391,13 +400,30 @@ export class PaymentService {
           customer: { select: { id: true, name: true, phone: true } },
           supplier: { select: { id: true, name: true, phone: true } },
           account: { select: { id: true, name: true, type: true } },
-          allocations: true,
+          allocations: {
+            include: {
+              sale: { select: { id: true, invoiceNumber: true } },
+              purchase: { select: { id: true, purchaseNumber: true } },
+            },
+          },
         },
+      }),
+      prisma.payment.aggregate({
+        where: { type: 'CUSTOMER_PAYMENT' },
+        _sum: { amount: true },
+      }),
+      prisma.payment.aggregate({
+        where: { type: 'SUPPLIER_PAYMENT' },
+        _sum: { amount: true },
       }),
     ]);
 
     return {
       payments,
+      summary: {
+        totalReceived: roundMoney(receivedAgg._sum.amount || 0),
+        totalPaid: roundMoney(paidAgg._sum.amount || 0),
+      },
       pagination: {
         page,
         limit,

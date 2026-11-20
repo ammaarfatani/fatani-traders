@@ -52,9 +52,6 @@ export class SaleService {
     }
 
     const immediatePay = Math.max(0, data.immediatePayment || 0);
-    if (immediatePay > 0 && !data.paymentAccountId) {
-      throw new AppError('Payment account is required for immediate payment', 400);
-    }
 
     const invoiceNumber = await this.generateInvoiceNumber();
 
@@ -244,19 +241,19 @@ export class SaleService {
       }
 
       // Handle immediate payment
-      if (immediatePay > 0 && data.paymentAccountId) {
-        const payAccount = await tx.financialAccount.findUnique({
-          where: { id: data.paymentAccountId },
-        });
-        if (!payAccount) {
-          throw new AppError('Payment account not found', 404);
-        }
+      if (immediatePay > 0) {
+        const payAccount = data.paymentAccountId
+          ? await tx.financialAccount.findUnique({ where: { id: data.paymentAccountId } })
+          : await tx.financialAccount.findFirst();
 
-        const newAccountBalance = roundMoney(payAccount.currentBalance + immediatePay);
-        await tx.financialAccount.update({
-          where: { id: payAccount.id },
-          data: { currentBalance: newAccountBalance },
-        });
+        let newAccountBalance = 0;
+        if (payAccount) {
+          newAccountBalance = roundMoney(payAccount.currentBalance + immediatePay);
+          await tx.financialAccount.update({
+            where: { id: payAccount.id },
+            data: { currentBalance: newAccountBalance },
+          });
+        }
 
         const paymentNumber = `PAY-${Date.now()}`;
         const payment = await tx.payment.create({
@@ -264,7 +261,7 @@ export class SaleService {
             paymentNumber,
             type: 'CUSTOMER_PAYMENT',
             customerId: customer.id,
-            accountId: payAccount.id,
+            accountId: payAccount ? payAccount.id : null,
             amount: immediatePay,
             paymentDate: new Date(data.invoiceDate),
             referenceNumber: invoiceNumber,
@@ -280,18 +277,20 @@ export class SaleService {
           },
         });
 
-        await tx.financialTransaction.create({
-          data: {
-            accountId: payAccount.id,
-            type: 'INFLOW',
-            amount: immediatePay,
-            balanceAfter: newAccountBalance,
-            referenceType: 'CUSTOMER_PAYMENT',
-            referenceId: payment.id,
-            date: new Date(data.invoiceDate),
-            description: `Payment received from customer ${customer.name} for ${invoiceNumber}`,
-          },
-        });
+        if (payAccount) {
+          await tx.financialTransaction.create({
+            data: {
+              accountId: payAccount.id,
+              type: 'INFLOW',
+              amount: immediatePay,
+              balanceAfter: newAccountBalance,
+              referenceType: 'CUSTOMER_PAYMENT',
+              referenceId: payment.id,
+              date: new Date(data.invoiceDate),
+              description: `Payment received from customer ${customer.name} for ${invoiceNumber}`,
+            },
+          });
+        }
       }
 
       // Update Customer Ledger
@@ -371,7 +370,7 @@ export class SaleService {
       ];
     }
 
-    const [total, sales] = await Promise.all([
+    const [total, sales, summaryAgg] = await Promise.all([
       prisma.sale.count({ where }),
       prisma.sale.findMany({
         where,
@@ -388,10 +387,19 @@ export class SaleService {
           },
         },
       }),
+      prisma.sale.aggregate({
+        where,
+        _sum: { grandTotal: true, paidAmount: true, balanceAmount: true },
+      }),
     ]);
 
     return {
       sales,
+      summary: {
+        totalSales: roundMoney(summaryAgg._sum.grandTotal || 0),
+        totalPaid: roundMoney(summaryAgg._sum.paidAmount || 0),
+        totalBalance: roundMoney(summaryAgg._sum.balanceAmount || 0),
+      },
       pagination: {
         page,
         limit,

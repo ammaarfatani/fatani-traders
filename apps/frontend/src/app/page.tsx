@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { formatPKR } from '@fatani/shared';
+import { formatPKR, formatWeight } from '@fatani/shared';
 import {
   TrendingUp,
   Package,
@@ -15,21 +15,16 @@ import {
   Plus,
   Receipt,
   ShoppingCart,
-  Landmark,
-  AlertTriangle,
+  ArrowDownLeft,
+  ArrowUpRight,
   ArrowRight,
   Scale,
-  Sparkles,
+  Calendar,
+  CheckCircle,
+  Clock,
+  ChevronRight,
+  Banknote,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-} from 'recharts';
 
 export default function DashboardPage() {
   const { data: dashboard, isLoading, error } = useQuery({
@@ -68,7 +63,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* Top Welcome & Quick Actions Header */}
       <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -83,15 +78,15 @@ export default function DashboardPage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-brand-charcoal tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-extrabold text-brand-charcoal tracking-tight font-sans">
                 Fatani Traders
               </h1>
               <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-light text-brand-fabric border border-brand-muted">
-                Live ERP
+                Wholesale Textile ERP
               </span>
             </div>
             <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-              Wholesale Textile Trading, Landed Cost & DigiKhata Ledgers
+              Fabric Purchases, Sales Billing, Payments & Digikhata History
             </p>
           </div>
         </div>
@@ -111,369 +106,399 @@ export default function DashboardPage() {
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-fabric hover:bg-brand-accent text-white font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition shrink-0"
           >
             <ShoppingCart className="w-4 h-4" />
-            <span>+ Purchase Lot</span>
+            <span>+ New Purchase</span>
           </Link>
 
           <Link
-            href="/expenses"
+            href="/payments"
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-brand-light hover:bg-brand-muted text-brand-charcoal font-semibold text-xs sm:text-sm transition shrink-0 border border-brand-muted"
           >
-            <Plus className="w-4 h-4" />
-            <span>Expense</span>
+            <Banknote className="w-4 h-4 text-emerald-700" />
+            <span>Payments</span>
           </Link>
         </div>
       </div>
 
-      {/* Primary KPI Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Today's Sales */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-brand-fabric/40 transition-colors">
-          <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-gray-500">
-              Today's Sales
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <p className="text-lg sm:text-2xl font-extrabold text-brand-charcoal">
-            {formatPKR(dashboard.todaySales)}
-          </p>
-          <p className="text-[11px] font-medium text-emerald-700 mt-1.5 flex items-center gap-1">
-            <Scale className="w-3.5 h-3.5" />
-            <span>{dashboard.todaySalesKg.toLocaleString()} KG Sold Today</span>
-          </p>
+      {/* 4 Main Summary Cards (Clickable to open relevant detailed history) */}
+      <div>
+        <div className="flex items-center justify-between mb-3 px-1">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+            Business Summary
+          </h2>
+          <span className="text-xs text-gray-400">Click any card to view complete history</span>
         </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+          {/* 1. Total Purchases */}
+          <Link
+            href="/purchases"
+            className="group block bg-white p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-brand-fabric hover:shadow-md transition-all active:scale-[0.99]"
+          >
+            <div className="flex items-center justify-between text-gray-500 mb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500 group-hover:text-brand-fabric transition-colors">
+                Total Purchases
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-brand-light text-brand-fabric flex items-center justify-center group-hover:bg-brand-deep group-hover:text-white transition-colors">
+                <ShoppingCart className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-2xl sm:text-3xl font-extrabold text-brand-charcoal tracking-tight">
+              {formatPKR(dashboard.totalPurchases || 0)}
+            </p>
+            <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs text-brand-fabric font-medium">
+              <span>View purchase history</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          {/* 2. Total Sales */}
+          <Link
+            href="/sales"
+            className="group block bg-white p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-brand-fabric hover:shadow-md transition-all active:scale-[0.99]"
+          >
+            <div className="flex items-center justify-between text-gray-500 mb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500 group-hover:text-brand-fabric transition-colors">
+                Total Sales
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-700 group-hover:text-white transition-colors">
+                <Receipt className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-2xl sm:text-3xl font-extrabold text-brand-charcoal tracking-tight">
+              {formatPKR(dashboard.totalSales || 0)}
+            </p>
+            <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs text-brand-fabric font-medium">
+              <span>View sales history</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          {/* 3. Total Payments Received */}
+          <Link
+            href="/payments?tab=received"
+            className="group block bg-white p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-emerald-500 hover:shadow-md transition-all active:scale-[0.99]"
+          >
+            <div className="flex items-center justify-between text-gray-500 mb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 group-hover:text-emerald-700 transition-colors">
+                Payments Received
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-700 group-hover:text-white transition-colors">
+                <ArrowDownLeft className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 tracking-tight">
+              {formatPKR(dashboard.totalPaymentsReceived || 0)}
+            </p>
+            <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs text-emerald-800 font-medium">
+              <span>Customer receipts</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          {/* 4. Total Payments Paid */}
+          <Link
+            href="/payments?tab=paid"
+            className="group block bg-white p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-amber-500 hover:shadow-md transition-all active:scale-[0.99]"
+          >
+            <div className="flex items-center justify-between text-gray-500 mb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-800 group-hover:text-amber-700 transition-colors">
+                Payments Paid
+              </span>
+              <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center group-hover:bg-amber-700 group-hover:text-white transition-colors">
+                <ArrowUpRight className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-2xl sm:text-3xl font-extrabold text-amber-700 tracking-tight">
+              {formatPKR(dashboard.totalPaymentsPaid || 0)}
+            </p>
+            <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between text-xs text-amber-800 font-medium">
+              <span>Supplier payouts</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+        </div>
+      </div>
+
+      {/* Secondary Indicators: Market Balances & Stock */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
         {/* Customer Receivables */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-red-300 transition-colors">
-          <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-gray-500">
-              Customer Khata
+        <Link
+          href="/customers"
+          className="bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-red-300 transition block group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              Customer Khata (Receivables)
             </span>
             <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-lg sm:text-2xl font-extrabold text-red-600">
-            {formatPKR(dashboard.totalReceivables)}
+          <p className="text-xl sm:text-2xl font-extrabold text-red-600">
+            {formatPKR(dashboard.totalReceivables || 0)}
           </p>
-          <p className="text-[11px] text-gray-500 mt-1.5">Total Market Receivables</p>
-        </div>
+          <p className="text-xs text-gray-500 mt-1 flex items-center justify-between">
+            <span>Outstanding market balances</span>
+            <span className="text-brand-fabric font-semibold group-hover:underline">View Khata →</span>
+          </p>
+        </Link>
 
         {/* Supplier Payables */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-amber-300 transition-colors">
-          <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-gray-500">
-              Supplier Payables
+        <Link
+          href="/suppliers"
+          className="bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-amber-300 transition block group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              Supplier Khata (Payables)
             </span>
             <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
               <Building2 className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-lg sm:text-2xl font-extrabold text-amber-600">
-            {formatPKR(dashboard.totalSupplierPayables)}
+          <p className="text-xl sm:text-2xl font-extrabold text-amber-600">
+            {formatPKR(dashboard.totalSupplierPayables || 0)}
           </p>
-          <p className="text-[11px] text-gray-500 mt-1.5">Mill & Wholesaler Debt</p>
-        </div>
+          <p className="text-xs text-gray-500 mt-1 flex items-center justify-between">
+            <span>Mill & wholesale balances</span>
+            <span className="text-brand-fabric font-semibold group-hover:underline">View Suppliers →</span>
+          </p>
+        </Link>
 
-        {/* Total Available Inventory */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-brand-fabric/40 transition-colors">
-          <div className="flex items-center justify-between text-gray-500 mb-2">
-            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-gray-500">
-              Stock Valuation
+        {/* Stock Inventory */}
+        <Link
+          href="/inventory"
+          className="bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle hover:border-brand-fabric/50 transition block group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              Fabric Inventory Available
             </span>
             <div className="w-8 h-8 rounded-lg bg-brand-light text-brand-fabric flex items-center justify-center">
               <Package className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-lg sm:text-2xl font-extrabold text-brand-charcoal">
-            {formatPKR(dashboard.totalInventoryValuation)}
+          <p className="text-xl sm:text-2xl font-extrabold text-brand-charcoal">
+            {Number(dashboard.totalAvailableStockKg || 0).toLocaleString()} KG
           </p>
-          <p className="text-[11px] font-medium text-brand-fabric mt-1.5">
-            {dashboard.totalAvailableStockKg.toLocaleString()} KG Available
+          <p className="text-xs text-gray-500 mt-1 flex items-center justify-between">
+            <span>Valuation: {formatPKR(dashboard.totalInventoryValuation || 0)}</span>
+            <span className="text-brand-fabric font-semibold group-hover:underline">View Stock →</span>
           </p>
-        </div>
+        </Link>
       </div>
 
-      {/* Secondary Financial Indicators: Liquid Funds & Monthly Accrual Profit */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-        {/* Cash & Bank Balances (Teal Card) */}
-        <div className="bg-brand-deep text-white p-5 sm:p-6 rounded-2xl shadow-subtle relative overflow-hidden border border-brand-dark/30">
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-brand-light/90">
-                Total Liquid Funds
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                <Landmark className="w-4 h-4 text-white" />
-              </div>
-            </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-white">
-              {formatPKR(dashboard.totalCashAndBankBalance)}
-            </p>
-            <div className="mt-4 pt-3 border-t border-white/10 space-y-1.5 text-xs text-gray-200">
-              {dashboard.accounts?.slice(0, 3).map((acc: any) => (
-                <div key={acc.id} className="flex justify-between items-center">
-                  <span className="truncate">{acc.name}</span>
-                  <span className="font-semibold text-emerald-300">{formatPKR(acc.currentBalance)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Month Gross Profit */}
+      {/* 4 Recent Activity Sections (Recent Sales, Purchases, Payments Received, Payments Paid) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* 1. Recent Sales */}
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between text-gray-500 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                This Month Gross Profit
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                <DollarSign className="w-4 h-4" />
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-brand-fabric" />
+                <h3 className="font-bold text-sm text-brand-charcoal">Recent Sales</h3>
               </div>
-            </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700">
-              {formatPKR(dashboard.monthGrossProfit)}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              Sales Revenue minus Actual Lot Landed COGS
-            </p>
-          </div>
-          <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
-            <span>Operating Expenses:</span>
-            <span className="font-semibold text-red-600">
-              {formatPKR(dashboard.monthOperatingExpenses)}
-            </span>
-          </div>
-        </div>
-
-        {/* Month Net Profit */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between text-gray-500 mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                This Month Net Profit
-              </span>
-              <div className="w-8 h-8 rounded-lg bg-brand-light text-brand-fabric flex items-center justify-center">
-                <TrendingUp className="w-4 h-4" />
-              </div>
-            </div>
-            <p
-              className={`text-2xl sm:text-3xl font-extrabold ${
-                dashboard.monthNetProfit >= 0 ? 'text-brand-fabric' : 'text-red-600'
-              }`}
-            >
-              {formatPKR(dashboard.monthNetProfit)}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              Accrual basis (Gross Profit − Overhead)
-            </p>
-          </div>
-          <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between text-xs text-gray-500">
-            <span>Today's Cash Recovered:</span>
-            <span className="font-semibold text-emerald-700">
-              {formatPKR(dashboard.todayPaymentsReceived)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Monthly Trends Chart */}
-      {dashboard.monthlyTrends && dashboard.monthlyTrends.length > 0 && (
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base font-bold text-brand-charcoal">Revenue & Profit Trends</h2>
-              <p className="text-xs text-gray-500">Monthly Sales Revenue vs. Cost of Goods Sold & Gross Margin</p>
-            </div>
-          </div>
-          <div className="h-64 sm:h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dashboard.monthlyTrends} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(val) => `${val / 1000}k`} />
-                <Tooltip
-                  formatter={(value: any) => formatPKR(value)}
-                  contentStyle={{
-                    backgroundColor: '#172F35',
-                    borderColor: '#28616C',
-                    borderRadius: '12px',
-                    color: '#fff',
-                    fontSize: '12px',
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                <Bar dataKey="sales" name="Sales Revenue" fill="#28616C" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="cogs" name="Landed COGS" fill="#94A3B8" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="grossProfit" name="Gross Profit" fill="#1E7E55" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* Alerts & Critical Action Lists Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Overdue / High Customer Receivables */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-red-500" />
-              <h3 className="font-bold text-sm text-brand-charcoal">High Outstanding Customers</h3>
-            </div>
-            <Link
-              href="/customers"
-              className="text-xs font-semibold text-brand-fabric hover:text-brand-accent flex items-center gap-1"
-            >
-              <span>View All</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          <div className="divide-y divide-gray-100">
-            {dashboard.overdueCustomers?.length === 0 ? (
-              <p className="text-xs text-gray-400 py-4 text-center">No overdue customers.</p>
-            ) : (
-              dashboard.overdueCustomers?.map((c: any) => (
-                <Link
-                  key={c.id}
-                  href={`/customers/${c.id}`}
-                  className="py-3 flex items-center justify-between hover:bg-brand-light/50 rounded-xl px-2 transition"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-brand-charcoal">{c.name}</p>
-                    <p className="text-xs text-gray-400">{c.shopName || c.phone}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-red-600">{formatPKR(c.currentBalance)}</p>
-                    <p className="text-[10px] text-gray-400">Khata Balance</p>
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Low Stock Lots */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
-              <h3 className="font-bold text-sm text-brand-charcoal">Low Stock Lots (&lt; 50 KG)</h3>
-            </div>
-            <Link
-              href="/inventory"
-              className="text-xs font-semibold text-brand-fabric hover:text-brand-accent flex items-center gap-1"
-            >
-              <span>Inventory</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          <div className="divide-y divide-gray-100">
-            {dashboard.lowStockLots?.length === 0 ? (
-              <p className="text-xs text-gray-400 py-4 text-center">All active lots have healthy stock levels.</p>
-            ) : (
-              dashboard.lowStockLots?.map((l: any) => (
-                <Link
-                  key={l.id}
-                  href={`/inventory/lots/${l.id}`}
-                  className="py-3 flex items-center justify-between hover:bg-brand-light/50 rounded-xl px-2 transition"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-brand-charcoal">{l.lotNumber}</p>
-                    <p className="text-xs text-gray-500">{l.product?.name}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-amber-600">{l.availableKg.toFixed(3)} KG</p>
-                    <p className="text-[10px] text-gray-400">Remaining</p>
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Transactions Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Recent Sales Invoices */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-sm text-brand-charcoal">Recent Sales Invoices</h3>
-            <Link
-              href="/sales"
-              className="text-xs font-semibold text-brand-fabric hover:text-brand-accent flex items-center gap-1"
-            >
-              <span>All Sales</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          <div className="divide-y divide-gray-100">
-            {dashboard.recentSales?.map((s: any) => (
               <Link
-                key={s.id}
-                href={`/sales/${s.id}`}
-                className="py-3 flex items-center justify-between hover:bg-brand-light/50 rounded-xl px-2 transition"
+                href="/sales"
+                className="text-xs font-semibold text-brand-fabric hover:text-brand-accent flex items-center gap-1"
               >
-                <div>
-                  <p className="text-sm font-semibold text-brand-charcoal">{s.customer?.name}</p>
-                  <p className="text-xs text-gray-400">
-                    {s.invoiceNumber} • {new Date(s.invoiceDate).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-brand-charcoal">{formatPKR(s.grandTotal)}</p>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-                      s.status === 'COMPLETED'
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-amber-50 text-amber-700'
-                    }`}
+                <span>All Sales</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            <div className="divide-y divide-gray-100 mt-1">
+              {!dashboard.recentSales || dashboard.recentSales.length === 0 ? (
+                <p className="text-xs text-gray-400 py-6 text-center">No sales recorded yet.</p>
+              ) : (
+                dashboard.recentSales.map((sale: any) => (
+                  <Link
+                    key={sale.id}
+                    href={`/sales/${sale.id}`}
+                    className="py-3 flex items-center justify-between gap-3 hover:bg-brand-light/40 px-1 rounded-xl transition block"
                   >
-                    {s.status}
-                  </span>
-                </div>
-              </Link>
-            ))}
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-brand-charcoal truncate">
+                        {sale.customer?.name}
+                      </p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        <span className="font-mono text-gray-600">{sale.invoiceNumber}</span> •{' '}
+                        {new Date(sale.invoiceDate).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-bold text-brand-charcoal">
+                        {formatPKR(sale.grandTotal)}
+                      </p>
+                      <span
+                        className={`inline-block text-[10px] px-1.5 py-0.2 rounded font-medium mt-0.5 ${
+                          sale.status === 'COMPLETED'
+                            ? 'text-emerald-700 bg-emerald-50'
+                            : sale.status === 'PARTIAL'
+                            ? 'text-amber-700 bg-amber-50'
+                            : 'text-red-700 bg-red-50'
+                        }`}
+                      >
+                        {sale.status}
+                      </span>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Recent Purchases */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-sm text-brand-charcoal">Recent Purchases</h3>
-            <Link
-              href="/purchases"
-              className="text-xs font-semibold text-brand-fabric hover:text-brand-accent flex items-center gap-1"
-            >
-              <span>All Purchases</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          <div className="divide-y divide-gray-100">
-            {dashboard.recentPurchases?.map((p: any) => (
+        {/* 2. Recent Purchases */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4 text-brand-fabric" />
+                <h3 className="font-bold text-sm text-brand-charcoal">Recent Purchases</h3>
+              </div>
               <Link
-                key={p.id}
-                href={`/purchases/${p.id}`}
-                className="py-3 flex items-center justify-between hover:bg-brand-light/50 rounded-xl px-2 transition"
+                href="/purchases"
+                className="text-xs font-semibold text-brand-fabric hover:text-brand-accent flex items-center gap-1"
               >
-                <div>
-                  <p className="text-sm font-semibold text-brand-charcoal">{p.supplier?.name}</p>
-                  <p className="text-xs text-gray-400">
-                    {p.purchaseNumber} • {new Date(p.purchaseDate).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-brand-charcoal">{formatPKR(p.totalLandedCost)}</p>
-                  <p className="text-[10px] text-brand-fabric font-semibold">Landed Cost</p>
-                </div>
+                <span>All Purchases</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </Link>
-            ))}
+            </div>
+
+            <div className="divide-y divide-gray-100 mt-1">
+              {!dashboard.recentPurchases || dashboard.recentPurchases.length === 0 ? (
+                <p className="text-xs text-gray-400 py-6 text-center">No purchases recorded yet.</p>
+              ) : (
+                dashboard.recentPurchases.map((pur: any) => (
+                  <Link
+                    key={pur.id}
+                    href={`/purchases/${pur.id}`}
+                    className="py-3 flex items-center justify-between gap-3 hover:bg-brand-light/40 px-1 rounded-xl transition block"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-brand-charcoal truncate">
+                        {pur.supplier?.name}
+                      </p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        <span className="font-mono text-gray-600">{pur.purchaseNumber}</span> •{' '}
+                        {new Date(pur.purchaseDate).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-bold text-brand-charcoal">
+                        {formatPKR(pur.totalLandedCost)}
+                      </p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">
+                        Paid: {formatPKR(pur.paidAmount)}
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Recent Payments Received */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <ArrowDownLeft className="w-4 h-4 text-emerald-700" />
+                <h3 className="font-bold text-sm text-brand-charcoal">Recent Payments Received</h3>
+              </div>
+              <Link
+                href="/payments?tab=received"
+                className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+              >
+                <span>View All</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            <div className="divide-y divide-gray-100 mt-1">
+              {!dashboard.recentPaymentsReceived || dashboard.recentPaymentsReceived.length === 0 ? (
+                <p className="text-xs text-gray-400 py-6 text-center">No customer payments recorded yet.</p>
+              ) : (
+                dashboard.recentPaymentsReceived.map((p: any) => {
+                  const invRef = p.allocations?.[0]?.sale?.invoiceNumber || p.referenceNumber || 'Direct Payment';
+                  return (
+                    <div
+                      key={p.id}
+                      className="py-3 flex items-center justify-between gap-3 px-1 rounded-xl"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-brand-charcoal truncate">
+                          {p.customer?.name}
+                        </p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          Ref: <span className="font-mono text-gray-700">{invRef}</span> •{' '}
+                          {new Date(p.paymentDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-extrabold text-emerald-700">
+                          +{formatPKR(p.amount)}
+                        </p>
+                        <span className="text-[10px] text-gray-400 font-mono">{p.paymentNumber}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Recent Payments Paid */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <ArrowUpRight className="w-4 h-4 text-amber-700" />
+                <h3 className="font-bold text-sm text-brand-charcoal">Recent Payments Paid</h3>
+              </div>
+              <Link
+                href="/payments?tab=paid"
+                className="text-xs font-semibold text-amber-700 hover:text-amber-800 flex items-center gap-1"
+              >
+                <span>View All</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            <div className="divide-y divide-gray-100 mt-1">
+              {!dashboard.recentPaymentsPaid || dashboard.recentPaymentsPaid.length === 0 ? (
+                <p className="text-xs text-gray-400 py-6 text-center">No supplier payments recorded yet.</p>
+              ) : (
+                dashboard.recentPaymentsPaid.map((p: any) => {
+                  const purRef = p.allocations?.[0]?.purchase?.purchaseNumber || p.referenceNumber || 'Direct Payment';
+                  return (
+                    <div
+                      key={p.id}
+                      className="py-3 flex items-center justify-between gap-3 px-1 rounded-xl"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-brand-charcoal truncate">
+                          {p.supplier?.name}
+                        </p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          Ref: <span className="font-mono text-gray-700">{purRef}</span> •{' '}
+                          {new Date(p.paymentDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-extrabold text-amber-700">
+                          -{formatPKR(p.amount)}
+                        </p>
+                        <span className="text-[10px] text-gray-400 font-mono">{p.paymentNumber}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>

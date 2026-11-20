@@ -29,7 +29,6 @@ export default function CustomerKhataDetailPage() {
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
-  const [accountId, setAccountId] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentRef, setPaymentRef] = useState('');
   const [selectedSaleId, setSelectedSaleId] = useState<string>('');
@@ -40,17 +39,6 @@ export default function CustomerKhataDetailPage() {
     queryKey: ['customer', id],
     queryFn: () => api.get<any>(`/customers/${id}`),
   });
-
-  const { data: accounts } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => api.get<any[]>('/accounts'),
-  });
-
-  React.useEffect(() => {
-    if (accounts && accounts.length > 0 && !accountId) {
-      setAccountId(accounts[0].id);
-    }
-  }, [accounts, accountId]);
 
   // Record Payment Mutation
   const recordPaymentMutation = useMutation({
@@ -77,15 +65,10 @@ export default function CustomerKhataDetailPage() {
       setModalError('Payment amount must be greater than zero');
       return;
     }
-    if (!accountId) {
-      setModalError('Please select a payment account');
-      return;
-    }
 
     recordPaymentMutation.mutate({
       type: 'CUSTOMER_PAYMENT',
       customerId: id,
-      accountId,
       amount: Number(paymentAmount),
       paymentDate,
       referenceNumber: paymentRef || undefined,
@@ -361,24 +344,6 @@ export default function CustomerKhataDetailPage() {
                   placeholder="e.g. 50000"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-brand-muted text-base font-bold text-brand-charcoal focus:ring-2 focus:ring-brand-fabric focus:border-brand-fabric outline-none"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-brand-charcoal mb-1">
-                  Deposit Into Account *
-                </label>
-                <select
-                  required
-                  value={accountId}
-                  onChange={(e) => setAccountId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-brand-muted text-sm text-brand-charcoal focus:ring-2 focus:ring-brand-fabric focus:border-brand-fabric outline-none bg-white"
-                >
-                  {accounts?.map((acc: any) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} ({acc.type} - Bal: {formatPKR(acc.currentBalance)})
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
