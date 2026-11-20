@@ -11,47 +11,62 @@ async function resetToProduction() {
     process.exit(1);
   }
 
-  console.log('Initiating safe production cleanup of business transactions...');
+  console.log('Initiating safe production cleanup of business transactions in dependency order...');
 
-  await prisma.$transaction(async (tx) => {
-    // 1. Returns
-    await tx.salesReturnItem.deleteMany({});
-    await tx.salesReturn.deleteMany({});
-    await tx.purchaseReturn.deleteMany({});
+  // 1. Returns items & returns
+  console.log('1/10 Clearing sales & purchase returns...');
+  await prisma.salesReturnItem.deleteMany({});
+  await prisma.salesReturn.deleteMany({});
+  await prisma.purchaseReturn.deleteMany({});
 
-    // 2. Payments & Allocations
-    await tx.paymentAllocation.deleteMany({});
-    await tx.payment.deleteMany({});
+  // 2. Payments & Allocations
+  console.log('2/10 Clearing payments & allocations...');
+  await prisma.paymentAllocation.deleteMany({});
+  await prisma.payment.deleteMany({});
 
-    // 3. Sales
-    await tx.saleItem.deleteMany({});
-    await tx.sale.deleteMany({});
+  // 3. Sales & Sale Items
+  console.log('3/10 Clearing sales & sale items...');
+  await prisma.saleItem.deleteMany({});
+  await prisma.sale.deleteMany({});
 
-    // 4. Purchases & Lots
-    await tx.lotExpense.deleteMany({});
-    await tx.purchaseLot.deleteMany({});
-    await tx.purchase.deleteMany({});
+  // 4. Lot dependents (Inventory Movements, Adjustments, Cost Adjustments, Lot Expenses)
+  console.log('4/10 Clearing lot dependents (movements, adjustments, cost adjustments, expenses)...');
+  await prisma.inventoryMovement.deleteMany({});
+  await prisma.inventoryAdjustment.deleteMany({});
+  await prisma.costAdjustment.deleteMany({});
+  await prisma.lotExpense.deleteMany({});
 
-    // 5. Ledgers
-    await tx.customerLedgerEntry.deleteMany({});
-    await tx.supplierLedgerEntry.deleteMany({});
+  // 5. Purchase Lots
+  console.log('5/10 Clearing purchase lots...');
+  await prisma.purchaseLot.deleteMany({});
 
-    // 6. Customers & Suppliers
-    await tx.customer.deleteMany({});
-    await tx.supplier.deleteMany({});
+  // 6. Purchases
+  console.log('6/10 Clearing purchases...');
+  await prisma.purchase.deleteMany({});
 
-    // 7. Inventory Adjustments & Financial Transactions
-    await tx.inventoryAdjustment.deleteMany({});
-    await tx.financialTransaction.deleteMany({});
-    await tx.expense.deleteMany({});
+  // 7. Ledgers
+  console.log('7/10 Clearing customer & supplier ledgers...');
+  await prisma.customerLedgerEntry.deleteMany({});
+  await prisma.supplierLedgerEntry.deleteMany({});
 
-    // 8. Reset Financial Account balances to 0
-    await tx.financialAccount.updateMany({
-      data: {
-        openingBalance: 0,
-        currentBalance: 0,
-      },
-    });
+  // 8. Customers & Suppliers
+  console.log('8/10 Clearing demo customers & suppliers...');
+  await prisma.customer.deleteMany({});
+  await prisma.supplier.deleteMany({});
+
+  // 9. Financial Transactions, Expenses & Audit Logs
+  console.log('9/10 Clearing financial transactions, expenses & audit logs...');
+  await prisma.financialTransaction.deleteMany({});
+  await prisma.expense.deleteMany({});
+  await prisma.auditLog.deleteMany({});
+
+  // 10. Reset Financial Account balances to 0
+  console.log('10/10 Resetting financial account balances to zero...');
+  await prisma.financialAccount.updateMany({
+    data: {
+      openingBalance: 0,
+      currentBalance: 0,
+    },
   });
 
   console.log('✓ Successfully wiped all demo/test transactions, customers, suppliers, purchases, and sales.');
