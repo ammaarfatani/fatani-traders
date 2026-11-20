@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/api';
 
 export interface User {
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
 
   const fetchCurrentUser = useCallback(async () => {
     try {
@@ -59,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (res.token && typeof window !== 'undefined') {
       localStorage.setItem('fatani_auth_token', res.token);
     }
+    queryClient.clear();
     setUser(res.user);
     router.push('/');
   };
@@ -72,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('fatani_auth_token');
       }
+      queryClient.clear();
       setUser(null);
       router.push('/login');
     }
