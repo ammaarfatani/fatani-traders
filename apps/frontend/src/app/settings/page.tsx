@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ReferenceRecords } from '@/components/ui/ReferenceRecords';
 import { api } from '@/lib/api';
 import {
   Settings,
@@ -156,6 +157,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto pb-16">
+      <ReferenceRecords />
       {/* Header */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted shadow-subtle flex items-center gap-3.5">
         <div className="w-11 h-11 rounded-xl bg-brand-deep text-white flex items-center justify-center">

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { SaleService } from '../services/sale.service';
-import { SaleCreateSchema } from '@fatani/shared';
+import { SaleCreateSchema, SaleUpdateSchema } from '@fatani/shared';
 
 export class SaleController {
   static async create(req: Request, res: Response, next: NextFunction) {
@@ -46,6 +46,37 @@ export class SaleController {
       return res.status(200).json({
         success: true,
         data: sale,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const validated = SaleUpdateSchema.parse(req.body);
+      const updated = await SaleService.updateSale(id, {
+        ...validated,
+        userId: req.user?.id,
+      });
+      return res.status(200).json({
+        success: true,
+        message: 'Sale invoice updated successfully',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async delete(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const result = await SaleService.deleteSale(id, req.user?.id);
+      return res.status(200).json({
+        success: true,
+        message: result.message,
       });
     } catch (err) {
       next(err);

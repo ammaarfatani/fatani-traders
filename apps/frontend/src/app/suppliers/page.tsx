@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { RecordActions } from '@/components/ui/RecordActions';
 import { api } from '@/lib/api';
 import { formatPKR } from '@fatani/shared';
 import {
@@ -154,9 +155,8 @@ export default function SuppliersListPage() {
             const isAdvance = supp.currentBalance < 0;
 
             return (
-              <Link
+              <div
                 key={supp.id}
-                href={`/suppliers/${supp.id}`}
                 className="block bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted hover:border-brand-fabric/50 transition shadow-subtle active:scale-[0.99]"
               >
                 <div className="flex items-center justify-between gap-3">
@@ -197,7 +197,13 @@ export default function SuppliersListPage() {
                     </span>
                   </div>
                 </div>
-              </Link>
+              <Link href={`/suppliers/${supp.id}`} className="inline-block py-3 text-sm underline">View history</Link>
+                <RecordActions record={supp} endpoint={`/suppliers/${supp.id}`} label={supp.name} fields={[
+                  {key:'name',label:'Name',required:true}, {key:'companyName',label:'Business name'},
+                  {key:'phone',label:'Phone',required:true}, {key:'alternatePhone',label:'Alternate phone'},
+                  {key:'address',label:'Address'}, {key:'notes',label:'Notes'}
+                ]} />
+              </div>
             );
           })}
         </div>

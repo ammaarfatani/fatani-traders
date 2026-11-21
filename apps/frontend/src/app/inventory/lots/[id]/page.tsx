@@ -4,6 +4,7 @@ import React from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { RecordActions } from '@/components/ui/RecordActions';
 import { api } from '@/lib/api';
 import { formatPKR, formatWeight } from '@fatani/shared';
 import {
@@ -79,6 +80,11 @@ export default function LotDetailPage() {
         </div>
       </div>
 
+      <Link className="inline-block underline p-3" href={`/purchases/${lot.purchaseId}`}>View, edit or delete this lot's purchase</Link>
+      <section className="bg-white p-4 rounded-xl border space-y-3"><h2 className="font-bold">Stock adjustments</h2>
+        {lot.adjustments?.length === 0 && <p>No stock adjustments.</p>}
+        {lot.adjustments?.map((a:any)=><div key={a.id} className="border-b pb-3"><p>{a.reason} — {a.gramsChange} g</p><RecordActions record={a} endpoint={`/inventory/adjustments/${a.id}`} label={a.reason} fields={[{key:'gramsChange',label:'Change in grams',type:'number',step:'1',required:true},{key:'reason',label:'Reason',required:true},{key:'date',label:'Date',type:'date',required:true},{key:'notes',label:'Notes'}]} /></div>)}
+      </section>
       {/* Lot Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white p-4 rounded-2xl border border-brand-muted shadow-subtle">

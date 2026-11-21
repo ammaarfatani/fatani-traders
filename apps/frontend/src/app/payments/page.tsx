@@ -20,7 +20,11 @@ import {
   Building2,
   CheckCircle,
   Package,
+  Edit,
+  Trash2,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
+import { EditPaymentModal } from '@/components/payments/EditPaymentModal';
 
 export default function PaymentsPage() {
   const searchParams = useSearchParams();
@@ -30,6 +34,17 @@ export default function PaymentsPage() {
   const [activeTab, setActiveTab] = useState<'RECEIVED' | 'PAID'>('RECEIVED');
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
+
+  // Edit and Delete state
+  const [editingPayment, setEditingPayment] = useState<any | null>(null);
+  const [deletingPayment, setDeletingPayment] = useState<any | null>(null);
+
+  const handleDeletePayment = async () => {
+    if (!deletingPayment) return;
+    await api.delete(`/payments/${deletingPayment.id}`);
+    queryClient.invalidateQueries();
+    setDeletingPayment(null);
+  };
 
   // Sync tab with URL search parameter if present (?tab=paid or ?tab=received)
   useEffect(() => {
@@ -97,11 +112,7 @@ export default function PaymentsPage() {
   const paymentMutation = useMutation({
     mutationFn: (payload: any) => api.post('/payments', payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
-      queryClient.invalidateQueries({ queryKey: ['purchases'] });
-      queryClient.invalidateQueries({ queryKey: ['payable-purchases'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries();
       setIsReceiveModalOpen(false);
       setIsPayModalOpen(false);
       resetForm();
@@ -445,6 +456,10 @@ export default function PaymentsPage() {
                         ) : (
                           <span className="text-amber-700">-{formatPKR(p.amount)}</span>
                         )}
+                        <div className="mt-2 flex justify-end gap-2">
+                          <button className="rounded border px-3 py-2 font-medium" onClick={()=>setEditingPayment(p)}>Edit</button>
+                          <button className="rounded border border-red-200 px-3 py-2 font-medium text-red-700" onClick={()=>setDeletingPayment(p)}>Delete</button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -454,6 +469,9 @@ export default function PaymentsPage() {
           </div>
         )}
       </div>
+
+      <EditPaymentModal isOpen={!!editingPayment} payment={editingPayment} onClose={()=>setEditingPayment(null)} onSuccess={()=>queryClient.invalidateQueries()} />
+      {deletingPayment && <ConfirmDeleteModal isOpen title="Reverse payment" description="This removes the payment and reverses its linked balances and account movement." itemIdentifier={`${deletingPayment.paymentNumber} — ${formatPKR(deletingPayment.amount)}`} onClose={()=>setDeletingPayment(null)} onConfirm={handleDeletePayment} />}
 
       {/* Receive Customer Payment Modal */}
       {isReceiveModalOpen && (

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatPKR, formatWeight } from '@fatani/shared';
 import {
@@ -16,12 +16,28 @@ import {
   Clock,
   AlertCircle,
   ArrowRight,
+  Edit,
+  Trash2,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
+import { EditSaleModal } from '@/components/sales/EditSaleModal';
 
 export default function SalesHistoryPage() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'COMPLETED' | 'PARTIAL' | 'UNPAID'>('ALL');
   const [page, setPage] = useState(1);
+
+  // Edit and Delete state
+  const [editingSale, setEditingSale] = useState<any | null>(null);
+  const [deletingSale, setDeletingSale] = useState<any | null>(null);
+
+  const handleDeleteSale = async () => {
+    if (!deletingSale) return;
+    await api.delete(`/sales/${deletingSale.id}`);
+    queryClient.invalidateQueries();
+    setDeletingSale(null);
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['sales', page, search],
@@ -273,15 +289,70 @@ export default function SalesHistoryPage() {
                   <span>
                     Click to view full invoice & all payment transactions
                   </span>
-                  <div className="flex items-center gap-1 text-brand-fabric font-semibold text-xs group-hover:translate-x-1 transition-transform">
-                    <span>Details</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditingSale(sale);
+                      }}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-brand-fabric hover:bg-brand-light transition"
+                      title="Edit Sale"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDeletingSale(sale);
+                      }}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+                      title="Delete Sale"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="flex items-center gap-1 text-brand-fabric font-semibold text-xs group-hover:translate-x-1 transition-transform ml-1">
+                      <span>Details</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </div>
                   </div>
                 </div>
               </Link>
             );
           })}
         </div>
+      )}
+
+      {/* Edit Sale Modal */}
+      {editingSale && (
+        <EditSaleModal
+          isOpen={!!editingSale}
+          onClose={() => setEditingSale(null)}
+          sale={editingSale}
+          onSuccess={() => {
+            queryClient.invalidateQueries();
+          }}
+        />
+      )}
+
+      {/* Delete Sale Confirmation Modal */}
+      {deletingSale && (
+        <ConfirmDeleteModal
+          isOpen={!!deletingSale}
+          onClose={() => setDeletingSale(null)}
+          onConfirm={handleDeleteSale}
+          title="Delete Sales Invoice"
+          description="Are you sure you want to permanently delete this sales invoice? This action will reverse inventory deductions and restore customer Khata balance."
+          itemIdentifier={`${deletingSale.invoiceNumber} (${deletingSale.customer?.name})`}
+          consequences={[
+            `Removes sales invoice ${deletingSale.invoiceNumber}.`,
+            'Restores inventory quantities to the respective purchase lots.',
+            `Credits customer balance by ${formatPKR(deletingSale.grandTotal)} (removes invoice debit).`,
+            'Protected: If any customer payments or sales returns are linked to this invoice, deletion will be blocked.',
+          ]}
+          confirmButtonText="Delete Invoice"
+        />
       )}
     </div>
   );

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { RecordActions } from '@/components/ui/RecordActions';
 import { api } from '@/lib/api';
 import { formatPKR } from '@fatani/shared';
 import {
@@ -116,6 +117,9 @@ export default function ExpensesPage() {
         </button>
       </div>
 
+      <details className="bg-white p-4 rounded-xl border"><summary className="cursor-pointer font-semibold">Manage expense categories</summary>
+        <div className="space-y-3 mt-3">{categories?.map((c:any)=><div key={c.id}><p>{c.name}</p><RecordActions record={c} label={c.name} endpoint={`/expenses/categories/${c.id}`} fields={[{key:'name',label:'Name',required:true},{key:'description',label:'Description'}]} /></div>)}</div>
+      </details>
       {/* Filter by Category */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <button
@@ -150,7 +154,7 @@ export default function ExpensesPage() {
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : expensesData?.expenses?.length === 0 ? (
+      ) : expensesData?.length === 0 ? (
         <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
           <p className="text-sm font-medium text-slate-500">No operating expenses found.</p>
           <button
@@ -163,7 +167,7 @@ export default function ExpensesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {expensesData?.expenses?.map((exp: any) => (
+          {expensesData?.map((exp: any) => (
             <div
               key={exp.id}
               className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-3"
@@ -181,6 +185,10 @@ export default function ExpensesPage() {
                 </p>
               </div>
 
+              <RecordActions record={exp} endpoint={`/expenses/${exp.id}`} label={`${exp.expenseNumber} — ${exp.title}`} fields={[
+                {key:'title',label:'Title',required:true}, {key:'categoryId',label:'Category',options:(categories || []).map((c:any)=>({value:c.id,label:c.name}))},
+                {key:'amount',label:'Amount',type:'number',min:0.01,required:true}, {key:'date',label:'Date',type:'date',required:true}, {key:'notes',label:'Notes'}
+              ]} />
               <div className="text-right shrink-0">
                 <p className="text-base font-extrabold text-red-600">{formatPKR(exp.amount)}</p>
                 <span className={`text-[10px] font-bold ${exp.isPaid ? 'text-slate-400' : 'text-amber-600'}`}>

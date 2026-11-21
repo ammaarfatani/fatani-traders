@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { RecordActions } from '@/components/ui/RecordActions';
 import { api } from '@/lib/api';
 import { formatPKR, gramsToKg, kgToGrams } from '@fatani/shared';
 import {
@@ -59,12 +60,12 @@ export default function ReturnsPage() {
   // Queries
   const { data: salesReturnsData, isLoading: isSalesLoading } = useQuery({
     queryKey: ['returns-sales'],
-    queryFn: () => api.get<{ data: any[]; pagination: any }>('/returns/sales'),
+    queryFn: () => api.get<any>('/returns/sales'),
   });
 
   const { data: purchaseReturnsData, isLoading: isPurchasesLoading } = useQuery({
     queryKey: ['returns-purchases'],
-    queryFn: () => api.get<{ data: any[]; pagination: any }>('/returns/purchases'),
+    queryFn: () => api.get<any>('/returns/purchases'),
   });
 
   const { data: salesList } = useQuery({
@@ -79,8 +80,14 @@ export default function ReturnsPage() {
     enabled: isPurchaseReturnModalOpen,
   });
 
-  const salesReturns = salesReturnsData?.data || [];
-  const purchaseReturns = purchaseReturnsData?.data || [];
+  const salesReturns: any[] = Array.isArray(salesReturnsData) ? salesReturnsData : salesReturnsData?.data || [];
+  const purchaseReturns: any[] = Array.isArray(purchaseReturnsData) ? purchaseReturnsData : purchaseReturnsData?.data || [];
+
+  const deleteReturn = useMutation({
+    mutationFn: ({kind,id}:{kind:'sales'|'purchases';id:string}) => api.delete(`/returns/${kind}/${id}`),
+    onSuccess: () => { queryClient.invalidateQueries(); setFormError(null); },
+    onError: (e:any) => setFormError(e.message || 'Unable to reverse return'),
+  });
 
   // When sale is selected in modal, load its items
   const handleSelectSale = async (saleId: string) => {
@@ -215,11 +222,11 @@ export default function ReturnsPage() {
     purchaseReturnMutation.mutate({
       purchaseId: chosenLot.purchaseId,
       lotId: chosenLot.id,
-      supplierId: chosenLot.purchase?.supplierId,
+      supplierId: chosenLot.purchase?.supplier?.id,
       returnDate: new Date(purchaseReturnDate).toISOString(),
-      grams: kgToGrams(Number(purchaseReturnKg)),
+      returnedGrams: kgToGrams(Number(purchaseReturnKg)),
       ratePerKg: purchaseReturnRate ? Number(purchaseReturnRate) : chosenLot.purchaseRatePerKg,
-      refundAmount: purchaseReturnImmediateRefund ? Number(purchaseReturnImmediateRefund) : 0,
+      refundReceived: purchaseReturnImmediateRefund ? Number(purchaseReturnImmediateRefund) : 0,
       refundAccountId: null,
       notes: purchaseReturnNotes || undefined,
     });
@@ -375,6 +382,7 @@ export default function ReturnsPage() {
                     <tr key={r.id} className="hover:bg-brand-light/40 transition">
                       <td className="py-3 px-4 font-mono font-semibold text-brand-deep">
                         {r.returnNumber}
+                        <RecordActions record={r} endpoint={`/returns/sales/${r.id}`} label={r.returnNumber} help="Date and notes can be corrected here. To change weight or value, delete the return after dependency checks and record the correction." fields={[{key:'returnDate',label:'Return date',type:'date',required:true},{key:'notes',label:'Notes'}]} />
                       </td>
                       <td className="py-3 px-4 text-gray-600">
                         {new Date(r.returnDate).toLocaleDateString('en-GB', {
@@ -412,6 +420,7 @@ export default function ReturnsPage() {
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-amber-700 text-sm">
                         {formatPKR(r.totalRefundAmount)}
+                        <button className="block ml-auto mt-2 rounded border px-3 py-2 text-xs" onClick={()=>{if(window.confirm(`Reverse return ${r.returnNumber}? Related stock and balance history will be corrected.`)) deleteReturn.mutate({kind:'sales',id:r.id})}}>Delete</button>
                       </td>
                     </tr>
                   ))}
@@ -451,6 +460,7 @@ export default function ReturnsPage() {
                     <tr key={r.id} className="hover:bg-brand-light/40 transition">
                       <td className="py-3 px-4 font-mono font-semibold text-brand-deep">
                         {r.returnNumber}
+                        <RecordActions record={r} endpoint={`/returns/purchases/${r.id}`} label={r.returnNumber} help="Date and notes can be corrected here. To change weight or value, delete the return after dependency checks and record the correction." fields={[{key:'returnDate',label:'Return date',type:'date',required:true},{key:'notes',label:'Notes'}]} />
                       </td>
                       <td className="py-3 px-4 text-gray-600">
                         {new Date(r.returnDate).toLocaleDateString('en-GB', {
@@ -480,6 +490,7 @@ export default function ReturnsPage() {
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-brand-charcoal text-sm">
                         {formatPKR(r.totalAmount)}
+                        <button className="block ml-auto mt-2 rounded border px-3 py-2 text-xs" onClick={()=>{if(window.confirm(`Reverse return ${r.returnNumber}? Related stock and balance history will be corrected.`)) deleteReturn.mutate({kind:'purchases',id:r.id})}}>Delete</button>
                       </td>
                     </tr>
                   ))}

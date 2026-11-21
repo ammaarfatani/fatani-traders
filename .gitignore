@@ -19,3 +19,5 @@ backups/
 apps/backend/backups/
 *.tsbuildinfo
 
+
+.test-mongo/

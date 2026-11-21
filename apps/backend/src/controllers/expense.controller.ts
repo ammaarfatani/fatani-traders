@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ExpenseService } from '../services/expense.service';
-import { GeneralExpenseCreateSchema } from '@fatani/shared';
+import { ProductCategorySchema, GeneralExpenseCreateSchema, GeneralExpenseUpdateSchema } from '@fatani/shared';
 
 export class ExpenseController {
   static async listCategories(_req: Request, res: Response, next: NextFunction) {
@@ -17,11 +17,40 @@ export class ExpenseController {
 
   static async createCategory(req: Request, res: Response, next: NextFunction) {
     try {
-      const { name, isCapitalizableDefault, description } = req.body;
+      const { name, description } = ProductCategorySchema.parse(req.body);
+      const isCapitalizableDefault = req.body.isCapitalizableDefault === true;
       const category = await ExpenseService.createCategory(name, isCapitalizableDefault, description);
       return res.status(201).json({
         success: true,
         data: category,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateCategory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const { name, description } = ProductCategorySchema.parse(req.body);
+      const category = await ExpenseService.updateCategory(id, name, description);
+      return res.status(200).json({
+        success: true,
+        message: 'Expense category updated successfully',
+        data: category,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteCategory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const result = await ExpenseService.deleteCategory(id);
+      return res.status(200).json({
+        success: true,
+        message: result.message,
       });
     } catch (err) {
       next(err);
@@ -63,6 +92,50 @@ export class ExpenseController {
         success: true,
         data: result.expenses,
         pagination: result.pagination,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getById(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const expense = await ExpenseService.getExpenseById(id);
+      return res.status(200).json({
+        success: true,
+        data: expense,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const validated = GeneralExpenseUpdateSchema.parse(req.body);
+      const updated = await ExpenseService.updateOperatingExpense(id, {
+        ...validated,
+        userId: req.user?.id,
+      });
+      return res.status(200).json({
+        success: true,
+        message: 'Expense updated successfully',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async delete(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const result = await ExpenseService.deleteOperatingExpense(id, req.user?.id);
+      return res.status(200).json({
+        success: true,
+        message: result.message,
       });
     } catch (err) {
       next(err);

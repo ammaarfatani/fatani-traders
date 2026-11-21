@@ -136,4 +136,59 @@ export class ProductService {
     await logAudit(data.userId, 'UPDATE_PRODUCT', 'Product', product.id, data);
     return product;
   }
+
+  static async deleteProduct(id: string, userId?: string) {
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            lots: true,
+            saleItems: true,
+          },
+        },
+      },
+    });
+
+    if (!product) throw new AppError('Product not found', 404);
+
+    const { lots, saleItems } = product._count;
+    if (lots > 0 || saleItems > 0) {
+      throw new AppError(
+        `Cannot delete fabric "${product.name}" because it is linked to ${lots} lot(s) and ${saleItems} sale(s). To disable this product, deactivate it instead.`,
+        400
+      );
+    }
+
+    await prisma.product.delete({ where: { id } });
+    await logAudit(userId, 'DELETE_PRODUCT', 'Product', id, { name: product.name });
+    return { success: true, message: `Product "${product.name}" deleted successfully` };
+  }
+
+  static async updateCategory(id: string, name: string, description?: string) {
+    const existing = await prisma.productCategory.findUnique({ where: { id } });
+    if (!existing) throw new AppError('Category not found', 404);
+
+    const duplicate = await prisma.productCategory.findFirst({
+      where: { name: name.trim(), id: { not: id } },
+    });
+    if (duplicate) throw new AppError('Another category already has this name', 400);
+
+    return prisma.productCategory.update({
+      where: { id },
+      data: {
+        name: name.trim(),
+        description: description !== undefined ? description : existing.description,
+      },
+    });
+  }
+
+  static async deleteCategory(id: string) {
+    const count = await prisma.product.count({ where: { categoryId: id } });
+    if (count > 0) {
+      throw new AppError(`Cannot delete category because ${count} product(s) belong to it.`, 400);
+    }
+    await prisma.productCategory.delete({ where: { id } });
+    return { success: true, message: 'Category deleted successfully' };
+  }
 }

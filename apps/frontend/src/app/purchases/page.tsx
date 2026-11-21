@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatPKR, formatWeight } from '@fatani/shared';
 import {
@@ -17,13 +17,29 @@ import {
   ArrowRight,
   Building2,
   Package,
+  Edit,
+  Trash2,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
+import { EditPurchaseModal } from '@/components/purchases/EditPurchaseModal';
 
 export default function PurchasesHistoryPage() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'PARTIAL' | 'UNPAID'>('ALL');
   const [supplierFilter, setSupplierFilter] = useState<string>('ALL'); // 'ALL' | 'UNKNOWN' | supplierId
   const [page, setPage] = useState(1);
+
+  // Edit and Delete state
+  const [editingPurchase, setEditingPurchase] = useState<any | null>(null);
+  const [deletingPurchase, setDeletingPurchase] = useState<any | null>(null);
+
+  const handleDeletePurchase = async () => {
+    if (!deletingPurchase) return;
+    await api.delete(`/purchases/${deletingPurchase.id}`);
+    queryClient.invalidateQueries();
+    setDeletingPurchase(null);
+  };
 
   // Fetch suppliers for filter dropdown
   const { data: suppliersData } = useQuery({
@@ -31,6 +47,7 @@ export default function PurchasesHistoryPage() {
     queryFn: () => api.get<any>('/suppliers?limit=100'),
   });
   const suppliers = suppliersData?.data || suppliersData?.suppliers || [];
+  const supplierOptions = suppliersData?.data || suppliersData?.suppliers || [];
 
   // Build query string
   const queryParams = new URLSearchParams({
@@ -334,15 +351,71 @@ export default function PurchasesHistoryPage() {
                       </span>
                     )}
                   </span>
-                  <div className="flex items-center gap-1 text-brand-fabric font-semibold text-xs group-hover:translate-x-1 transition-transform">
-                    <span>Details & Payments</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setEditingPurchase(pur);
+                      }}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-brand-fabric hover:bg-brand-light transition"
+                      title="Edit Purchase"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDeletingPurchase(pur);
+                      }}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+                      title="Delete Purchase"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="flex items-center gap-1 text-brand-fabric font-semibold text-xs group-hover:translate-x-1 transition-transform ml-1">
+                      <span>Details</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </div>
                   </div>
                 </div>
               </Link>
             );
           })}
         </div>
+      )}
+
+      {/* Edit Purchase Modal */}
+      {editingPurchase && (
+        <EditPurchaseModal
+          isOpen={!!editingPurchase}
+          onClose={() => setEditingPurchase(null)}
+          purchase={editingPurchase}
+          suppliers={supplierOptions}
+          onSuccess={() => {
+            queryClient.invalidateQueries();
+          }}
+        />
+      )}
+
+      {/* Delete Purchase Confirmation Modal */}
+      {deletingPurchase && (
+        <ConfirmDeleteModal
+          isOpen={!!deletingPurchase}
+          onClose={() => setDeletingPurchase(null)}
+          onConfirm={handleDeletePurchase}
+          title="Delete Purchase"
+          description="Are you sure you want to permanently delete this purchase record? This action will remove the purchase and all linked lot records."
+          itemIdentifier={`${deletingPurchase.purchaseNumber} (${deletingPurchase.lots?.[0]?.product?.name || 'Fabric'})`}
+          consequences={[
+            `Removes purchase record ${deletingPurchase.purchaseNumber}.`,
+            'Restores inventory stock for the lot.',
+            `Reverses supplier payable balance of ${formatPKR(deletingPurchase.totalLandedCost)}.`,
+            'Protected: If any fabric from this lot has already been sold or if payments have been made, deletion will be blocked.',
+          ]}
+          confirmButtonText="Delete Purchase"
+        />
       )}
     </div>
   );

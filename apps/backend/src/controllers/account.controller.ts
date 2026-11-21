@@ -61,4 +61,35 @@ export class AccountController {
       next(err);
     }
   }
+
+  static async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const validated = FinancialAccountSchema.partial().parse(req.body);
+      const account = await AccountService.updateAccount(id, {
+        ...validated,
+        userId: req.user?.id,
+      });
+      return res.status(200).json({
+        success: true,
+        message: 'Account updated successfully',
+        data: account,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async delete(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const result = await AccountService.deleteAccount(id, req.user?.id);
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
 }

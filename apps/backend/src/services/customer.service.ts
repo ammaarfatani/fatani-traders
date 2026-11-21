@@ -155,6 +155,7 @@ export class CustomerService {
       address?: string;
       creditLimit?: number;
       notes?: string;
+      isActive?: boolean;
       userId?: string;
     }
   ) {
@@ -168,11 +169,47 @@ export class CustomerService {
         address: data.address?.trim(),
         creditLimit: data.creditLimit,
         notes: data.notes,
+        isActive: data.isActive,
       },
     });
 
     await logAudit(data.userId, 'UPDATE_CUSTOMER', 'Customer', customer.id, data);
     return customer;
+  }
+
+  static async deleteCustomer(id: string, userId?: string) {
+    const customer = await prisma.customer.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            sales: true,
+            payments: true,
+            salesReturns: true,
+          },
+        },
+      },
+    });
+
+    if (!customer) throw new AppError('Customer not found', 404);
+
+    if (customer.openingBalance !== 0 || customer.currentBalance !== 0) throw new AppError('Cannot delete customer with an opening or outstanding balance', 400);
+
+    const { sales, payments, salesReturns } = customer._count;
+    if (sales > 0 || payments > 0 || salesReturns > 0) {
+      throw new AppError(
+        `Cannot delete customer "${customer.name}" because they have ${sales} sale(s), ${payments} payment(s), and ${salesReturns} return(s). To disable this customer, deactivate them instead.`,
+        400
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.customerLedgerEntry.deleteMany({ where: { customerId: id } });
+      await tx.customer.delete({ where: { id } });
+    });
+
+    await logAudit(userId, 'DELETE_CUSTOMER', 'Customer', id, { name: customer.name });
+    return { success: true, message: `Customer "${customer.name}" deleted successfully` };
   }
 
   static async getCustomerStatement(

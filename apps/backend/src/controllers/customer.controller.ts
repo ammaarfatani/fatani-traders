@@ -83,4 +83,17 @@ export class CustomerController {
       next(err);
     }
   }
+
+  static async delete(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const result = await CustomerService.deleteCustomer(id, req.user?.id);
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
 }

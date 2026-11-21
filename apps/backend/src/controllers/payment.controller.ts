@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { PaymentService } from '../services/payment.service';
-import { PaymentCreateSchema } from '@fatani/shared';
+import { PaymentCreateSchema, PaymentUpdateSchema } from '@fatani/shared';
 import { AppError } from '../middleware/errorHandler';
 
 export class PaymentController {
@@ -83,6 +83,50 @@ export class PaymentController {
         data: result.payments,
         summary: result.summary,
         pagination: result.pagination,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getById(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const payment = await PaymentService.getPaymentById(id);
+      return res.status(200).json({
+        success: true,
+        data: payment,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const validated = PaymentUpdateSchema.parse(req.body);
+      const updated = await PaymentService.updatePayment(id, {
+        ...validated,
+        userId: req.user?.id,
+      });
+      return res.status(200).json({
+        success: true,
+        message: 'Payment updated successfully',
+        data: updated,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async delete(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const result = await PaymentService.deletePayment(id, req.user?.id);
+      return res.status(200).json({
+        success: true,
+        message: result.message,
       });
     } catch (err) {
       next(err);

@@ -168,4 +168,161 @@ export class ExpenseService {
       },
     };
   }
+
+  static async getExpenseById(id: string) {
+    const expense = await prisma.expense.findUnique({
+      where: { id },
+      include: {
+        category: true,
+        account: true,
+      },
+    });
+
+    if (!expense) throw new AppError('Expense record not found', 404);
+    return expense;
+  }
+
+  static async updateOperatingExpense(
+    id: string,
+    data: {
+      categoryId?: string;
+      title?: string;
+      amount?: number;
+      date?: string | Date;
+      accountId?: string | null;
+      isPaid?: boolean;
+      notes?: string | null;
+      userId?: string;
+    }
+  ) {
+    const expense = await prisma.expense.findUnique({
+      where: { id },
+      include: { account: true, category: true },
+    });
+
+    if (!expense) throw new AppError('Expense record not found', 404);
+
+    if ((data.accountId !== undefined && data.accountId !== expense.accountId) || (data.isPaid !== undefined && data.isPaid !== expense.isPaid)) throw new AppError('Payment status and linked account cannot be changed through an expense edit',400);
+    if (data.categoryId && !(await prisma.expenseCategory.findUnique({where:{id:data.categoryId}}))) throw new AppError('Category not found',404);
+    const oldAmount = expense.amount;
+    const newAmount = data.amount !== undefined ? data.amount : oldAmount;
+    if (newAmount <= 0) throw new AppError('Expense amount must be greater than zero', 400);
+
+    const deltaAmount = roundMoney(newAmount - oldAmount);
+
+    const result = await prisma.$transaction(async (tx) => {
+      // If financial account was used and amount changed
+      if (expense.isPaid && expense.accountId && deltaAmount !== 0) {
+        const account = await tx.financialAccount.findUnique({ where: { id: expense.accountId } });
+        if (account) {
+          const newBal = roundMoney(account.currentBalance - deltaAmount);
+          await tx.financialAccount.update({
+            where: { id: account.id },
+            data: { currentBalance: newBal },
+          });
+
+          await tx.financialTransaction.updateMany({
+            where: { referenceId: expense.id, referenceType: 'OPERATING_EXPENSE' },
+            data: {
+              amount: newAmount,
+              balanceAfter: newBal,
+              date: data.date ? new Date(data.date) : expense.date,
+            },
+          });
+        }
+      }
+
+      const updated = await tx.expense.update({
+        where: { id },
+        data: {
+          categoryId: data.categoryId || expense.categoryId,
+          title: data.title !== undefined ? data.title.trim() : expense.title,
+          amount: newAmount,
+          date: data.date ? new Date(data.date) : expense.date,
+          accountId: data.accountId !== undefined ? data.accountId : expense.accountId,
+          isPaid: data.isPaid !== undefined ? data.isPaid : expense.isPaid,
+          notes: data.notes !== undefined ? data.notes : expense.notes,
+        },
+        include: {
+          category: true,
+          account: true,
+        },
+      });
+
+      return updated;
+    });
+
+    await logAudit(data.userId, 'UPDATE_OPERATING_EXPENSE', 'Expense', expense.id, {
+      expenseNumber: expense.expenseNumber,
+      oldAmount,
+      newAmount,
+    });
+
+    return result;
+  }
+
+  static async deleteOperatingExpense(id: string, userId?: string) {
+    const expense = await prisma.expense.findUnique({
+      where: { id },
+      include: { account: true },
+    });
+
+    if (!expense) throw new AppError('Expense record not found', 404);
+
+    const amount = expense.amount;
+
+    await prisma.$transaction(async (tx) => {
+      // Revert account balance if paid
+      if (expense.isPaid && expense.accountId) {
+        const account = await tx.financialAccount.findUnique({ where: { id: expense.accountId } });
+        if (account) {
+          const newBal = roundMoney(account.currentBalance + amount);
+          await tx.financialAccount.update({
+            where: { id: account.id },
+            data: { currentBalance: newBal },
+          });
+
+          await tx.financialTransaction.deleteMany({
+            where: { referenceId: expense.id, referenceType: 'OPERATING_EXPENSE' },
+          });
+        }
+      }
+
+      await tx.expense.delete({ where: { id } });
+    });
+
+    await logAudit(userId, 'DELETE_OPERATING_EXPENSE', 'Expense', expense.id, {
+      expenseNumber: expense.expenseNumber,
+      amount,
+    });
+
+    return { success: true, message: `Expense ${expense.expenseNumber} deleted successfully` };
+  }
+
+  static async updateCategory(id: string, name: string, description?: string) {
+    const existing = await prisma.expenseCategory.findUnique({ where: { id } });
+    if (!existing) throw new AppError('Expense category not found', 404);
+
+    const duplicate = await prisma.expenseCategory.findFirst({
+      where: { name: name.trim(), id: { not: id } },
+    });
+    if (duplicate) throw new AppError('Another category already has this name', 400);
+
+    return prisma.expenseCategory.update({
+      where: { id },
+      data: {
+        name: name.trim(),
+        description: description !== undefined ? description : existing.description,
+      },
+    });
+  }
+
+  static async deleteCategory(id: string) {
+    const count = await prisma.expense.count({ where: { categoryId: id } });
+    if (count > 0) {
+      throw new AppError(`Cannot delete category because ${count} expense(s) are recorded under it.`, 400);
+    }
+    await prisma.expenseCategory.delete({ where: { id } });
+    return { success: true, message: 'Expense category deleted successfully' };
+  }
 }

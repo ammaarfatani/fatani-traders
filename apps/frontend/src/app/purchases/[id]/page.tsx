@@ -21,7 +21,12 @@ import {
   ArrowUpRight,
   Calendar,
   AlertCircle,
+  Edit,
+  Trash2,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
+import { EditPurchaseModal } from '@/components/purchases/EditPurchaseModal';
+import { EditLotExpenseModal } from '@/components/purchases/EditLotExpenseModal';
 
 export default function PurchaseDetailPage() {
   const params = useParams();
@@ -45,10 +50,31 @@ export default function PurchaseDetailPage() {
   const [paymentNotes, setPaymentNotes] = useState('');
   const [paymentModalError, setPaymentModalError] = useState<string | null>(null);
 
+  // Edit / Delete State
+  const [isEditPurchaseOpen, setIsEditPurchaseOpen] = useState(false);
+  const [isDeletePurchaseOpen, setIsDeletePurchaseOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<any | null>(null);
+  const [deletingExpense, setDeletingExpense] = useState<any | null>(null);
+
   const { data: purchase, isLoading, error } = useQuery({
     queryKey: ['purchase', id],
     queryFn: () => api.get<any>(`/purchases/${id}`),
   });
+
+  const { data: suppliers = [] } = useQuery({queryKey:['suppliers'],queryFn:()=>api.get<any[]>('/suppliers'),enabled:isEditPurchaseOpen});
+
+  const handleDeletePurchase = async () => {
+    await api.delete(`/purchases/${id}`);
+    queryClient.invalidateQueries();
+    router.push('/purchases');
+  };
+
+  const handleDeleteExpense = async () => {
+    if (!deletingExpense) return;
+    await api.delete(`/purchases/expenses/${deletingExpense.id}`);
+    queryClient.invalidateQueries();
+    setDeletingExpense(null);
+  };
 
   const lot = purchase?.lots?.[0];
 
@@ -56,8 +82,7 @@ export default function PurchaseDetailPage() {
     mutationFn: (payload: any) =>
       api.post(`/purchases/lots/${lot.id}/expense`, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase', id] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries();
       setIsExpenseModalOpen(false);
       setExpenseAmount('');
       setCustomExpenseName('');
@@ -72,12 +97,9 @@ export default function PurchaseDetailPage() {
   const recordPaymentMutation = useMutation({
     mutationFn: (payload: any) => api.post('/payments', payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase', id] });
-      queryClient.invalidateQueries({ queryKey: ['purchases'] });
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries();
       if (purchase?.supplierId) {
-        queryClient.invalidateQueries({ queryKey: ['supplier', purchase.supplierId] });
+        queryClient.invalidateQueries();
       }
       setIsPaymentModalOpen(false);
       setPaymentAmount('');
@@ -207,6 +229,24 @@ export default function PurchaseDetailPage() {
               <span>Add Landed Expense</span>
             </button>
           )}
+
+          <button
+            onClick={() => setIsEditPurchaseOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-brand-muted hover:bg-brand-light text-brand-charcoal font-semibold text-xs transition"
+            title="Edit Purchase"
+          >
+            <Edit className="w-3.5 h-3.5 text-gray-500" />
+            <span>Edit</span>
+          </button>
+
+          <button
+            onClick={() => setIsDeletePurchaseOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-semibold text-xs transition"
+            title="Delete Purchase"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete</span>
+          </button>
         </div>
       </div>
 
@@ -318,6 +358,7 @@ export default function PurchaseDetailPage() {
                   <th className="py-2.5">Payee / Description</th>
                   <th className="py-2.5">Notes</th>
                   <th className="py-2.5 text-right">Amount (PKR)</th>
+                  <th className="py-2.5 text-right w-20">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -328,6 +369,24 @@ export default function PurchaseDetailPage() {
                     <td className="py-3 text-gray-500">{exp.notes || '-'}</td>
                     <td className="py-3 text-right font-bold text-brand-charcoal">
                       {formatPKR(exp.amount)}
+                    </td>
+                    <td className="py-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setEditingExpense(exp)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-brand-fabric hover:bg-brand-light transition"
+                          title="Edit Expense"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setDeletingExpense(exp)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+                          title="Delete Expense"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -623,6 +682,66 @@ export default function PurchaseDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Edit Purchase Modal */}
+      {purchase && (
+        <EditPurchaseModal
+          isOpen={isEditPurchaseOpen}
+          onClose={() => setIsEditPurchaseOpen(false)}
+          purchase={purchase}
+          suppliers={suppliers}
+          onSuccess={() => {
+            queryClient.invalidateQueries();
+            queryClient.invalidateQueries();
+          }}
+        />
+      )}
+
+      {/* Delete Purchase Confirmation Modal */}
+      {purchase && (
+        <ConfirmDeleteModal
+          isOpen={isDeletePurchaseOpen}
+          onClose={() => setIsDeletePurchaseOpen(false)}
+          onConfirm={handleDeletePurchase}
+          title="Delete Purchase"
+          description="Are you sure you want to permanently delete this purchase record? This action will remove the purchase and all linked lot records."
+          itemIdentifier={`${purchase.purchaseNumber} (${fabricName})`}
+          consequences={[
+            `Removes purchase record ${purchase.purchaseNumber} and associated lot #${lot?.lotNumber || ''}.`,
+            `Restores/removes the added inventory weight of ${lot ? formatWeight(lot.purchasedGrams) : ''}.`,
+            `Reverses supplier payable balance of ${formatPKR(purchase.totalLandedCost)}.`,
+            'Protected: If any fabric from this lot has already been sold or if payments have been made, deletion will be blocked.',
+          ]}
+          confirmButtonText="Delete Purchase"
+        />
+      )}
+
+      {/* Edit Landed Expense Modal */}
+      <EditLotExpenseModal
+        isOpen={!!editingExpense}
+        onClose={() => setEditingExpense(null)}
+        expense={editingExpense}
+        onSuccess={() => {
+          queryClient.invalidateQueries();
+          queryClient.invalidateQueries();
+        }}
+      />
+
+      {/* Delete Landed Expense Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingExpense}
+        onClose={() => setDeletingExpense(null)}
+        onConfirm={handleDeleteExpense}
+        title="Delete Landed Expense"
+        description="Are you sure you want to delete this additional landed cost expense?"
+        itemIdentifier={deletingExpense ? `${deletingExpense.category} - ${formatPKR(deletingExpense.amount)}` : ''}
+        consequences={[
+          'Removes this expense from the lot cost breakdown.',
+          'Recalculates the landed cost per KG for this purchase lot.',
+          'Adjusts the total landed cost and outstanding balance payable.',
+        ]}
+        confirmButtonText="Delete Expense"
+      />
     </div>
   );
 }

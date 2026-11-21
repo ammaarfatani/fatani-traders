@@ -33,7 +33,11 @@ import {
   MessageCircle,
   Loader2,
   ExternalLink,
+  Edit,
+  Trash2,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
+import { EditSaleModal } from '@/components/sales/EditSaleModal';
 
 export default function InvoiceDetailPage() {
   const params = useParams();
@@ -63,6 +67,16 @@ export default function InvoiceDetailPage() {
   const [paymentNotes, setPaymentNotes] = useState('');
   const [modalError, setModalError] = useState<string | null>(null);
 
+  // Edit / Delete State
+  const [isEditSaleOpen, setIsEditSaleOpen] = useState(false);
+  const [isDeleteSaleOpen, setIsDeleteSaleOpen] = useState(false);
+
+  const handleDeleteSale = async () => {
+    await api.delete(`/sales/${id}`);
+    queryClient.invalidateQueries();
+    router.push('/sales');
+  };
+
   // Detect native file sharing capability (Web Share API Level 2)
   useEffect(() => {
     if (typeof navigator !== 'undefined' && typeof navigator.canShare === 'function') {
@@ -83,11 +97,7 @@ export default function InvoiceDetailPage() {
   const recordPaymentMutation = useMutation({
     mutationFn: (payload: any) => api.post('/payments', payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sale', id] });
-      queryClient.invalidateQueries({ queryKey: ['sales'] });
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['customer', sale?.customerId] });
+      queryClient.invalidateQueries();
       setIsPaymentModalOpen(false);
       setPaymentAmount('');
       setPaymentRef('');
@@ -520,6 +530,26 @@ export default function InvoiceDetailPage() {
               <Copy className="w-4 h-4" />
             )}
             <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
+          </button>
+
+          {/* Edit Sale Invoice Button */}
+          <button
+            onClick={() => setIsEditSaleOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-brand-muted hover:bg-brand-light text-brand-charcoal font-semibold text-xs transition active:scale-95"
+            title="Edit Sales Invoice"
+          >
+            <Edit className="w-3.5 h-3.5 text-gray-500" />
+            <span>Edit</span>
+          </button>
+
+          {/* Delete Sale Invoice Button */}
+          <button
+            onClick={() => setIsDeleteSaleOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-semibold text-xs transition active:scale-95"
+            title="Delete Sales Invoice"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete</span>
           </button>
         </div>
       </div>
@@ -1071,6 +1101,38 @@ export default function InvoiceDetailPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Edit Sale Modal */}
+      {sale && (
+        <EditSaleModal
+          isOpen={isEditSaleOpen}
+          onClose={() => setIsEditSaleOpen(false)}
+          sale={sale}
+          onSuccess={() => {
+            queryClient.invalidateQueries();
+            queryClient.invalidateQueries();
+          }}
+        />
+      )}
+
+      {/* Delete Sale Confirmation Modal */}
+      {sale && (
+        <ConfirmDeleteModal
+          isOpen={isDeleteSaleOpen}
+          onClose={() => setIsDeleteSaleOpen(false)}
+          onConfirm={handleDeleteSale}
+          title="Delete Sales Invoice"
+          description="Are you sure you want to permanently delete this sales invoice? This action will reverse inventory deductions and restore customer Khata balance."
+          itemIdentifier={`${sale.invoiceNumber} (${sale.customer?.name})`}
+          consequences={[
+            `Removes sales invoice ${sale.invoiceNumber}.`,
+            'Restores inventory quantities to the respective purchase lots.',
+            `Credits customer balance by ${formatPKR(sale.grandTotal)} (removes invoice debit).`,
+            'Protected: If any customer payments or sales returns are linked to this invoice, deletion will be blocked.',
+          ]}
+          confirmButtonText="Delete Invoice"
+        />
       )}
     </div>
   );

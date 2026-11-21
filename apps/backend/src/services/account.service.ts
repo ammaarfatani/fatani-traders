@@ -165,4 +165,62 @@ export class AccountService {
 
     return result;
   }
+
+  static async updateAccount(
+    id: string,
+    data: {
+      name?: string;
+      type?: string;
+      accountNumber?: string;
+      bankName?: string;
+      notes?: string;
+      isActive?: boolean;
+      userId?: string;
+    }
+  ) {
+    const account = await prisma.financialAccount.update({
+      where: { id },
+      data: {
+        name: data.name?.trim(),
+        type: data.type,
+        accountNumber: data.accountNumber?.trim(),
+        bankName: data.bankName?.trim(),
+        notes: data.notes,
+        isActive: data.isActive,
+      },
+    });
+
+    await logAudit(data.userId, 'UPDATE_ACCOUNT', 'FinancialAccount', account.id, data);
+    return account;
+  }
+
+  static async deleteAccount(id: string, userId?: string) {
+    const account = await prisma.financialAccount.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            transactions: true,
+            payments: true,
+            lotExpenses: true,
+            operatingExpenses: true,
+          },
+        },
+      },
+    });
+
+    if (!account) throw new AppError('Account not found', 404);
+
+    const { transactions, payments, lotExpenses, operatingExpenses } = account._count;
+    if (transactions > 0 || payments > 0 || lotExpenses > 0 || operatingExpenses > 0) {
+      throw new AppError(
+        `Cannot delete account "${account.name}" because it has ${transactions} transaction(s). Please deactivate the account instead.`,
+        400
+      );
+    }
+
+    await prisma.financialAccount.delete({ where: { id } });
+    await logAudit(userId, 'DELETE_ACCOUNT', 'FinancialAccount', id, { name: account.name });
+    return { success: true, message: `Account "${account.name}" deleted successfully` };
+  }
 }

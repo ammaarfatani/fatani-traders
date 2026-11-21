@@ -156,7 +156,7 @@ export class InventoryService {
     notes?: string;
     userId?: string;
   }) {
-    if (data.gramsChange === 0) {
+    if (!Number.isInteger(data.gramsChange) || data.gramsChange === 0) {
       throw new AppError('Adjustment grams cannot be zero', 400);
     }
 
@@ -236,4 +236,25 @@ export class InventoryService {
 
     return result;
   }
+  static async changeAdjustment(id: string, data: {gramsChange?: number; reason?: string; date?: string; notes?: string} | null, userId?: string) {
+    const result = await prisma.$transaction(async tx => {
+      const old = await tx.inventoryAdjustment.findUnique({where:{id}});
+      if (!old) throw new AppError('Adjustment not found',404);
+      const source = await tx.inventoryMovement.findFirst({where:{referenceType:'ADJUSTMENT',referenceId:id}});
+      if (!source) throw new AppError('This adjustment belongs to a return and must be corrected through that return',400);
+      const lot = await tx.purchaseLot.findUniqueOrThrow({where:{id:old.lotId}});
+      const next = data ? data.gramsChange ?? old.gramsChange : 0;
+      if (!Number.isInteger(next) || (data && next === 0)) throw new AppError('Enter a nonzero integer number of grams',400);
+      const delta = next - old.gramsChange;
+      const availableGrams = lot.availableGrams + delta;
+      if (availableGrams < 0) throw new AppError('Cannot reverse adjustment: stock has already been used',400);
+      await tx.purchaseLot.update({where:{id:lot.id},data:{availableGrams,adjustedGrams:{increment:delta},status:availableGrams?'ACTIVE':'DEPLETED'}});
+      await tx.inventoryMovement.create({data:{lotId:lot.id,type:'ADJUSTMENT',gramsChange:delta,resultingAvailableGrams:availableGrams,referenceType:'ADJUSTMENT_CORRECTION',referenceId:id,notes:data?'Adjustment edited':'Adjustment reversed'}});
+      if (!data) return tx.inventoryAdjustment.delete({where:{id}});
+      return tx.inventoryAdjustment.update({where:{id},data:{...data, date:data.date?new Date(data.date):old.date}});
+    });
+    await logAudit(userId,data?'UPDATE_ADJUSTMENT':'DELETE_ADJUSTMENT','InventoryAdjustment',id,{beforeOrAfter:result});
+    return result;
+  }
+
 }

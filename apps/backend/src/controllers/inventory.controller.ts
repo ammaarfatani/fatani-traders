@@ -3,6 +3,14 @@ import { InventoryService } from '../services/inventory.service';
 import { StockAdjustmentSchema } from '@fatani/shared';
 
 export class InventoryController {
+  static async changeAdjustment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = req.method === 'DELETE' ? null : StockAdjustmentSchema.omit({lotId:true}).partial().parse(req.body);
+      const result = await InventoryService.changeAdjustment(String(req.params.id), data as any, req.user?.id);
+      res.json({success:true,data:result});
+    } catch(e) { next(e); }
+  }
+
   static async getAvailableLots(req: Request, res: Response, next: NextFunction) {
     try {
       const productId = typeof req.query.productId === 'string' ? req.query.productId : undefined;

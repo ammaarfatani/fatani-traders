@@ -7,27 +7,45 @@ export class ReturnsService {
   private static async generateSalesReturnNumber(): Promise<string> {
     const today = new Date();
     const prefix = `SR-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
-    const count = await prisma.salesReturn.count({
+    const returns = await prisma.salesReturn.findMany({
       where: {
         returnNumber: {
           startsWith: prefix,
         },
       },
+      select: { returnNumber: true },
     });
-    return `${prefix}-${String(count + 1).padStart(4, '0')}`;
+    let maxNum = 0;
+    for (const r of returns) {
+      const match = r.returnNumber.match(/-(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    return `${prefix}-${String(maxNum + 1).padStart(4, '0')}`;
   }
 
   private static async generatePurchaseReturnNumber(): Promise<string> {
     const today = new Date();
     const prefix = `PR-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
-    const count = await prisma.purchaseReturn.count({
+    const returns = await prisma.purchaseReturn.findMany({
       where: {
         returnNumber: {
           startsWith: prefix,
         },
       },
+      select: { returnNumber: true },
     });
-    return `${prefix}-${String(count + 1).padStart(4, '0')}`;
+    let maxNum = 0;
+    for (const r of returns) {
+      const match = r.returnNumber.match(/-(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    return `${prefix}-${String(maxNum + 1).padStart(4, '0')}`;
   }
 
   static async createSalesReturn(data: {
@@ -36,7 +54,7 @@ export class ReturnsService {
     returnDate: string | Date;
     items: Array<{
       saleItemId: string;
-      lotId: string;
+      lotId?: string;
       returnedGrams: number;
       ratePerKg: number;
       isRestocked?: boolean;
@@ -77,28 +95,35 @@ export class ReturnsService {
         isRestocked: boolean;
       }> = [];
 
+      const seen = new Set<string>();
       for (const item of data.items) {
+        if (seen.has(item.saleItemId)) throw new AppError('Duplicate return item',400);
+        seen.add(item.saleItemId);
+        const previous = await tx.salesReturnItem.aggregate({where:{saleItemId:item.saleItemId},_sum:{grams:true}});
+
         const saleItem = sale.items.find((si) => si.id === item.saleItemId);
         if (!saleItem) {
           throw new AppError(`Sale item ${item.saleItemId} not found on this invoice`, 400);
         }
 
-        if (item.returnedGrams > saleItem.grams) {
+        if (!Number.isInteger(item.returnedGrams) || item.returnedGrams <= 0 || item.returnedGrams + (previous._sum.grams || 0) > saleItem.grams) {
           throw new AppError(
             `Cannot return more than originally sold. Sold: ${gramsToKg(saleItem.grams)} KG, Returned: ${gramsToKg(item.returnedGrams)} KG`,
             400
           );
         }
 
+        if (item.lotId && item.lotId !== saleItem.lotId) throw new AppError('Return lot does not match sale item',400);
+        const lotId = saleItem.lotId;
         const lot = await tx.purchaseLot.findUnique({
-          where: { id: item.lotId },
+          where: { id: lotId },
         });
         if (!lot) {
-          throw new AppError(`Lot ${item.lotId} not found`, 404);
+          throw new AppError(`Lot ${lotId} not found`, 404);
         }
 
         const itemRefundAmount = roundMoney((item.returnedGrams / 1000) * item.ratePerKg);
-        const itemCogsReversed = roundMoney((item.returnedGrams / 1000) * lot.landedCostPerKg);
+        const itemCogsReversed = roundMoney((item.returnedGrams / 1000) * saleItem.costPerKg);
 
         totalRefundValue = roundMoney(totalRefundValue + itemRefundAmount);
         totalCogsReversed = roundMoney(totalCogsReversed + itemCogsReversed);
@@ -148,7 +173,7 @@ export class ReturnsService {
           lotId: lot.id,
           grams: item.returnedGrams,
           ratePerKg: item.ratePerKg,
-          costPerKg: lot.landedCostPerKg,
+          costPerKg: saleItem.costPerKg,
           refundAmount: itemRefundAmount,
           isRestocked,
         });
@@ -303,6 +328,7 @@ export class ReturnsService {
       );
     }
 
+    if (lot.purchaseId !== data.purchaseId || lot.purchase.supplierId !== data.supplierId) throw new AppError('Return purchase or supplier does not match lot',400);
     const supplier = await prisma.supplier.findUnique({
       where: { id: data.supplierId },
     });
@@ -445,9 +471,11 @@ export class ReturnsService {
 
   static async getSalesReturns(page: number = 1, limit: number = 20) {
     const skip = (page - 1) * limit;
+    const where = {OR:[{notes:null},{NOT:{notes:{contains:'[Reversed]'}}}]};
     const [total, items] = await Promise.all([
-      prisma.salesReturn.count(),
+      prisma.salesReturn.count({where}),
       prisma.salesReturn.findMany({
+        where,
         skip,
         take: limit,
         orderBy: { returnDate: 'desc' },
@@ -472,9 +500,11 @@ export class ReturnsService {
 
   static async getPurchaseReturns(page: number = 1, limit: number = 20) {
     const skip = (page - 1) * limit;
+    const where = {OR:[{notes:null},{NOT:{notes:{contains:'[Reversed]'}}}]};
     const [total, items] = await Promise.all([
-      prisma.purchaseReturn.count(),
+      prisma.purchaseReturn.count({where}),
       prisma.purchaseReturn.findMany({
+        where,
         skip,
         take: limit,
         orderBy: { returnDate: 'desc' },
@@ -495,5 +525,96 @@ export class ReturnsService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  static async updateReturn(kind: 'sales' | 'purchases', id: string, data: {returnDate?: string; notes?: string}, userId?: string) {
+    const result = await prisma.$transaction(async tx => {
+      const existing = kind === 'sales' ? await tx.salesReturn.findUnique({where:{id}}) : await tx.purchaseReturn.findUnique({where:{id}});
+      if (!existing) throw new AppError('Return not found',404);
+      if (existing.notes?.includes('[Reversed]')) throw new AppError('A reversed return cannot be edited',400);
+      const values = {notes: data.notes, ...(data.returnDate ? {returnDate: new Date(data.returnDate)} : {})};
+      const row = kind === 'sales' ? await tx.salesReturn.update({where:{id},data:values}) : await tx.purchaseReturn.update({where:{id},data:values});
+      if (data.returnDate) {
+        const date = new Date(data.returnDate);
+        if (kind === 'sales') {
+          const movements = await tx.inventoryMovement.findMany({where:{referenceId:row.returnNumber,referenceType:'SALES_RETURN'},orderBy:{createdAt:'asc'}});
+          const items = await tx.salesReturnItem.findMany({where:{salesReturnId:id},orderBy:{id:'asc'}});
+          for (let i=0;i<Math.min(movements.length,items.length);i++) await tx.inventoryMovement.update({where:{id:movements[i].id},data:{referenceId:id,gramsChange:items[i].isRestocked?items[i].grams:0,date}});
+        } else {
+          await tx.inventoryMovement.updateMany({where:{referenceId:row.returnNumber,referenceType:'PURCHASE_RETURN'},data:{referenceId:id,date}});
+        }
+        await tx.customerLedgerEntry.updateMany({where:{referenceId:id},data:{date}});
+        await tx.supplierLedgerEntry.updateMany({where:{referenceId:id},data:{date}});
+        await tx.financialTransaction.updateMany({where:{referenceId:id},data:{date}});
+      }
+      return row;
+    });
+    await logAudit(userId,'UPDATE_RETURN',kind,id,data);
+    return result;
+  }
+
+  static async deleteSalesReturn(id: string, userId?: string) {
+    const result = await prisma.$transaction(async tx => {
+      const row = await tx.salesReturn.findUnique({where:{id},include:{items:true}});
+      if (!row) throw new AppError('Sales return not found',404);
+      if (row.notes?.includes('[Reversed]')) throw new AppError('Return has already been reversed',400);
+      for (const item of row.items) {
+        if (!item.isRestocked) {
+          const adjustment = await tx.inventoryAdjustment.findFirst({where:{lotId:item.lotId,reason:{contains:row.returnNumber}}});
+          if (!adjustment) throw new AppError('Damaged return adjustment history is missing; review required',400);
+          const lot = await tx.purchaseLot.findUniqueOrThrow({where:{id:item.lotId}});
+          await tx.inventoryMovement.create({data:{lotId:lot.id,type:'ADJUSTMENT',gramsChange:0,resultingAvailableGrams:lot.availableGrams,referenceType:'RETURN_REVERSAL',referenceId:id,notes:`Removed damaged return adjustment ${row.returnNumber}`}});
+          await tx.inventoryAdjustment.delete({where:{id:adjustment.id}});
+          continue;
+        }
+        const lot = await tx.purchaseLot.findUniqueOrThrow({where:{id:item.lotId}});
+        if (lot.availableGrams < item.grams) throw new AppError('Cannot delete return: restocked fabric has already been used',400);
+        const availableGrams = lot.availableGrams - item.grams;
+        await tx.purchaseLot.update({where:{id:lot.id},data:{availableGrams,soldGrams:{increment:item.grams},status:availableGrams ? 'ACTIVE':'DEPLETED'}});
+        await tx.inventoryMovement.create({data:{lotId:lot.id,type:'ADJUSTMENT',gramsChange:-item.grams,resultingAvailableGrams:availableGrams,referenceType:'RETURN_REVERSAL',referenceId:id,notes:`Reversal of ${row.returnNumber}`}});
+      }
+      const entries = await tx.customerLedgerEntry.findMany({where:{referenceId:id,type:{in:['RETURN','PAYMENT']}}});
+      const delta = roundMoney(entries.reduce((sum,e)=>sum+e.credit-e.debit,0));
+      const customer = await tx.customer.update({where:{id:row.customerId},data:{currentBalance:{increment:delta}}});
+      await tx.customerLedgerEntry.create({data:{customerId:row.customerId,date:new Date(),type:'ADJUSTMENT',referenceId:id,referenceNumber:row.returnNumber,description:'Return reversal',debit:Math.max(0,delta),credit:Math.max(0,-delta),runningBalance:customer.currentBalance}});
+      await this.reverseRefunds(tx,id);
+      await tx.salesReturnItem.deleteMany({where:{salesReturnId:id}});
+      await tx.salesReturn.update({where:{id},data:{notes:`${row.notes || ''}\n[Reversed]`}});
+      return row;
+    });
+    await logAudit(userId,'DELETE_SALES_RETURN','SalesReturn',id,result);
+    return {success:true,message:'Return reversed successfully'};
+  }
+
+  private static async reverseRefunds(tx: any, id: string) {
+    const refunds = await tx.financialTransaction.findMany({where:{referenceId:id,referenceType:{in:['SALES_RETURN_REFUND','PURCHASE_RETURN_REFUND']}}});
+    for (const refund of refunds) {
+      const delta = refund.type === 'OUTFLOW' ? refund.amount : -refund.amount;
+      const account = await tx.financialAccount.update({where:{id:refund.accountId},data:{currentBalance:{increment:delta}}});
+      await tx.financialTransaction.create({data:{accountId:refund.accountId,type:delta>0?'INFLOW':'OUTFLOW',amount:refund.amount,balanceAfter:account.currentBalance,referenceType:'RETURN_REVERSAL',referenceId:id,description:'Reversal of actual return refund'}});
+    }
+  }
+
+  static async deletePurchaseReturn(id: string, userId?: string) {
+    const result = await prisma.$transaction(async tx => {
+      const row = await tx.purchaseReturn.findUnique({where:{id}});
+      if (!row) throw new AppError('Purchase return not found',404);
+      if (row.notes?.includes('[Reversed]')) throw new AppError('Return has already been reversed',400);
+      const lot = await tx.purchaseLot.findUniqueOrThrow({where:{id:row.lotId}});
+      if (lot.returnedGrams < row.grams) throw new AppError('Return history does not match inventory; review required',400);
+      const updated = await tx.purchaseLot.update({where:{id:lot.id},data:{availableGrams:{increment:row.grams},returnedGrams:{decrement:row.grams},status:'ACTIVE'}});
+      await tx.inventoryMovement.create({data:{lotId:lot.id,type:'ADJUSTMENT',gramsChange:row.grams,resultingAvailableGrams:updated.availableGrams,referenceType:'RETURN_REVERSAL',referenceId:id,notes:`Reversal of ${row.returnNumber}`}});
+      if (row.supplierId) {
+        const entries = await tx.supplierLedgerEntry.findMany({where:{referenceId:id,type:{in:['RETURN','PAYMENT']}}});
+        const delta = roundMoney(entries.reduce((sum,e)=>sum+e.debit-e.credit,0));
+        const supplier = await tx.supplier.update({where:{id:row.supplierId},data:{currentBalance:{increment:delta}}});
+        await tx.supplierLedgerEntry.create({data:{supplierId:row.supplierId,date:new Date(),type:'ADJUSTMENT',referenceId:id,referenceNumber:row.returnNumber,description:'Return reversal',credit:Math.max(0,delta),debit:Math.max(0,-delta),runningBalance:supplier.currentBalance}});
+      }
+      await this.reverseRefunds(tx,id);
+      await tx.purchaseReturn.update({where:{id},data:{notes:`${row.notes || ''}\n[Reversed]`}});
+      return row;
+    });
+    await logAudit(userId,'DELETE_PURCHASE_RETURN','PurchaseReturn',id,result);
+    return {success:true,message:'Return reversed successfully'};
   }
 }

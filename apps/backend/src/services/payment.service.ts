@@ -1,20 +1,29 @@
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
-import { roundMoney } from '@fatani/shared';
+import { roundMoney, formatPKR } from '@fatani/shared';
 import { logAudit } from '../middleware/audit';
 
 export class PaymentService {
   private static async generatePaymentNumber(): Promise<string> {
     const today = new Date();
     const prefix = `PAY-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
-    const count = await prisma.payment.count({
+    const payments = await prisma.payment.findMany({
       where: {
         paymentNumber: {
           startsWith: prefix,
         },
       },
+      select: { paymentNumber: true },
     });
-    return `${prefix}-${String(count + 1).padStart(4, '0')}`;
+    let maxNum = 0;
+    for (const p of payments) {
+      const match = p.paymentNumber.match(/-(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    return `${prefix}-${String(maxNum + 1).padStart(4, '0')}`;
   }
 
   static async recordCustomerPayment(data: {
@@ -223,7 +232,7 @@ export class PaymentService {
       throw new AppError('Purchase record not found', 404);
     }
 
-    if (data.amount > purchase.balanceAmount) {
+    if (data.amount <= 0 || data.amount > purchase.balanceAmount) {
       throw new AppError(
         `Payment amount (PKR ${data.amount}) cannot exceed remaining balance (PKR ${purchase.balanceAmount})`,
         400
@@ -303,7 +312,7 @@ export class PaymentService {
             date: new Date(data.paymentDate),
             type: 'PAYMENT',
             referenceNumber: paymentNumber,
-            referenceId: purchase.id,
+            referenceId: payment.id,
             description: data.notes || `Payment for purchase ${purchase.purchaseNumber}`,
             debit: data.amount,
             credit: 0,
@@ -585,6 +594,316 @@ export class PaymentService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  static async getPaymentById(id: string) {
+    const payment = await prisma.payment.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        supplier: true,
+        purchase: {
+          include: { lots: { include: { product: true } } },
+        },
+        account: true,
+        allocations: {
+          include: {
+            sale: true,
+            purchase: {
+              include: { lots: { include: { product: true } } },
+            },
+          },
+        },
+      },
+    });
+
+    if (!payment) throw new AppError('Payment record not found', 404);
+    return payment;
+  }
+
+  static async updatePayment(
+    id: string,
+    data: {
+      amount?: number;
+      paymentDate?: string | Date;
+      referenceNumber?: string | null;
+      notes?: string | null;
+      userId?: string;
+    }
+  ) {
+    const payment = await prisma.payment.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        supplier: true,
+        purchase: true,
+        account: true,
+        allocations: { include: { sale: true, purchase: true } },
+      },
+    });
+
+    if (!payment) throw new AppError('Payment record not found', 404);
+
+    if (payment.allocations.length > 1 || (payment.type === 'SUPPLIER_PAYMENT' && !payment.purchaseId && payment.allocations.length > 0)) throw new AppError('Split or FIFO payments require a reviewed allocation correction',400);
+    if (payment.allocations.length === 1 && payment.allocations[0].amount !== payment.amount) throw new AppError('Payments with partially allocated balances require a reviewed allocation correction',400);
+    const oldAmount = payment.amount;
+    const newAmount = data.amount !== undefined ? data.amount : oldAmount;
+    if (newAmount <= 0) throw new AppError('Payment amount must be greater than zero', 400);
+
+    const deltaAmount = roundMoney(newAmount - oldAmount);
+    const purchaseId = payment.purchaseId || payment.allocations[0]?.purchaseId;
+    const linkedPurchase = purchaseId ? await prisma.purchase.findUnique({where:{id:purchaseId}}) : null;
+    if (linkedPurchase && newAmount > linkedPurchase.totalLandedCost - (linkedPurchase.paidAmount - (payment.allocations[0]?.amount || 0))) throw new AppError('Payment exceeds remaining purchase balance',400);
+    if (payment.type === 'CUSTOMER_PAYMENT' && payment.allocations.length === 1 && payment.allocations[0].saleId) {
+      const sale = payment.allocations[0].sale;
+      if (newAmount > (sale?.grandTotal || 0) - ((sale?.paidAmount || 0) - payment.allocations[0].amount)) throw new AppError('Payment exceeds remaining invoice balance',400);
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Customer Payment Update
+      if (payment.type === 'CUSTOMER_PAYMENT' && payment.customerId) {
+        const customer = await tx.customer.findUnique({ where: { id: payment.customerId } });
+        if (customer && deltaAmount !== 0) {
+          const newCustBal = roundMoney(customer.currentBalance - deltaAmount);
+          await tx.customer.update({
+            where: { id: customer.id },
+            data: { currentBalance: newCustBal },
+          });
+
+        }
+        await tx.customerLedgerEntry.updateMany({where:{referenceId:payment.id,type:'PAYMENT'},data:{credit:newAmount,...(customer && deltaAmount!==0?{runningBalance:roundMoney(customer.currentBalance-deltaAmount)}:{}),date:data.paymentDate?new Date(data.paymentDate):payment.paymentDate}});
+
+        if (payment.allocations.length === 1 && payment.allocations[0].saleId && deltaAmount !== 0) {
+          const alloc = payment.allocations[0];
+          const sale = await tx.sale.findUnique({ where: { id: alloc.saleId! } });
+          if (sale) {
+            const newPaid = roundMoney(sale.paidAmount + deltaAmount);
+            if (newPaid > sale.grandTotal) {
+              throw new AppError(
+                `Payment amount (${formatPKR(newAmount)}) exceeds sale grand total (${formatPKR(sale.grandTotal)})`,
+                400
+              );
+            }
+            await tx.sale.update({
+              where: { id: sale.id },
+              data: {
+                paidAmount: newPaid,
+                balanceAmount: Math.max(0, roundMoney(sale.grandTotal - newPaid)),
+              },
+            });
+            await tx.paymentAllocation.update({
+              where: { id: alloc.id },
+              data: { amount: newAmount },
+            });
+          }
+        }
+      }
+
+      // 2. Supplier / Purchase Payment Update
+      if (payment.type === 'SUPPLIER_PAYMENT' || payment.type === 'PURCHASE_PAYMENT') {
+        const targetPurchaseId = payment.purchaseId || payment.allocations?.[0]?.purchaseId;
+        if (targetPurchaseId && deltaAmount !== 0) {
+          const purchase = await tx.purchase.findUnique({ where: { id: targetPurchaseId } });
+          if (purchase) {
+            const newPaid = roundMoney(purchase.paidAmount + deltaAmount);
+            if (newPaid > purchase.totalLandedCost) {
+              throw new AppError(
+                `Payment amount (${formatPKR(newAmount)}) exceeds purchase total cost (${formatPKR(purchase.totalLandedCost)})`,
+                400
+              );
+            }
+            await tx.purchase.update({
+              where: { id: purchase.id },
+              data: {
+                paidAmount: newPaid,
+                balanceAmount: Math.max(0, roundMoney(purchase.totalLandedCost - newPaid)),
+              },
+            });
+
+            if (payment.allocations.length > 0) {
+              await tx.paymentAllocation.updateMany({
+                where: { paymentId: payment.id },
+                data: { amount: newAmount },
+              });
+            }
+          }
+        }
+
+        if (payment.supplierId) {
+          const supplier = await tx.supplier.findUnique({ where: { id: payment.supplierId } });
+          if (supplier) {
+            await tx.supplierLedgerEntry.updateMany({
+              where: { referenceId: payment.id, type: 'PAYMENT' },
+              data: {
+                debit: newAmount,
+                date: data.paymentDate ? new Date(data.paymentDate) : payment.paymentDate,
+              },
+            });
+            if (deltaAmount !== 0) {
+              const newSuppBal = roundMoney(supplier.currentBalance - deltaAmount);
+              await tx.supplier.update({where:{id:supplier.id},data:{currentBalance:newSuppBal}});
+              await tx.supplierLedgerEntry.updateMany({where:{referenceId:payment.id,type:'PAYMENT'},data:{runningBalance:newSuppBal}});
+            }
+          }
+        }
+      }
+
+      // 3. Financial Account Outflow/Inflow update
+      if (payment.accountId) {
+        const account = await tx.financialAccount.findUnique({ where: { id: payment.accountId } });
+        if (account) {
+          const newAccBal = payment.type === 'CUSTOMER_PAYMENT' ? roundMoney(account.currentBalance + deltaAmount) : roundMoney(account.currentBalance - deltaAmount);
+          if(deltaAmount!==0) await tx.financialAccount.update({where:{id:account.id},data:{currentBalance:newAccBal}});
+
+          await tx.financialTransaction.updateMany({
+            where: { referenceId: payment.id },
+            data: {
+              amount: newAmount,
+              balanceAfter: newAccBal,
+              date: data.paymentDate ? new Date(data.paymentDate) : payment.paymentDate,
+            },
+          });
+        }
+      }
+
+      const updated = await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          amount: newAmount,
+          paymentDate: data.paymentDate ? new Date(data.paymentDate) : payment.paymentDate,
+          referenceNumber:
+            data.referenceNumber !== undefined ? data.referenceNumber : payment.referenceNumber,
+          notes: data.notes !== undefined ? data.notes : payment.notes,
+        },
+      });
+
+      return updated;
+    });
+
+    await logAudit(data.userId, 'UPDATE_PAYMENT', 'Payment', payment.id, {
+      paymentNumber: payment.paymentNumber,
+      oldAmount,
+      newAmount,
+    });
+
+    return result;
+  }
+
+  static async deletePayment(id: string, userId?: string) {
+    const payment = await prisma.payment.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        supplier: true,
+        purchase: true,
+        account: true,
+        allocations: { include: { sale: true, purchase: true } },
+      },
+    });
+
+    if (!payment) throw new AppError('Payment record not found', 404);
+
+    if (payment.allocations.length > 1 || (payment.type === 'SUPPLIER_PAYMENT' && !payment.purchaseId && payment.allocations.length > 0)) throw new AppError('Split or FIFO payments require a reviewed allocation reversal',400);
+    const amount = payment.amount;
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Revert Customer Payment
+      if (payment.type === 'CUSTOMER_PAYMENT' && payment.customerId) {
+        const customer = await tx.customer.findUnique({ where: { id: payment.customerId } });
+        if (customer) {
+          const newCustBal = roundMoney(customer.currentBalance + amount);
+          await tx.customer.update({
+            where: { id: customer.id },
+            data: { currentBalance: newCustBal },
+          });
+
+          await tx.customerLedgerEntry.deleteMany({
+            where: { referenceId: payment.id },
+          });
+        }
+
+        for (const alloc of payment.allocations) {
+          if (alloc.saleId) {
+            const sale = await tx.sale.findUnique({ where: { id: alloc.saleId } });
+            if (sale) {
+              const newPaid = Math.max(0, roundMoney(sale.paidAmount - alloc.amount));
+              await tx.sale.update({
+                where: { id: sale.id },
+                data: {
+                  paidAmount: newPaid,
+                  balanceAmount: roundMoney(sale.grandTotal - newPaid),
+                },
+              });
+            }
+          }
+        }
+      }
+
+      // 2. Revert Supplier / Purchase Payment
+      if (payment.type === 'SUPPLIER_PAYMENT' || payment.type === 'PURCHASE_PAYMENT') {
+        const targetPurchaseId = payment.purchaseId || payment.allocations?.[0]?.purchaseId;
+        if (targetPurchaseId) {
+          const purchase = await tx.purchase.findUnique({ where: { id: targetPurchaseId } });
+          if (purchase) {
+            const newPaid = Math.max(0, roundMoney(purchase.paidAmount - amount));
+            await tx.purchase.update({
+              where: { id: purchase.id },
+              data: {
+                paidAmount: newPaid,
+                balanceAmount: roundMoney(purchase.totalLandedCost - newPaid),
+              },
+            });
+          }
+        }
+
+        if (payment.supplierId) {
+          const supplier = await tx.supplier.findUnique({ where: { id: payment.supplierId } });
+          if (supplier) {
+            const newSuppBal = roundMoney(supplier.currentBalance + amount);
+            await tx.supplier.update({
+              where: { id: supplier.id },
+              data: { currentBalance: newSuppBal },
+            });
+
+            await tx.supplierLedgerEntry.deleteMany({where:{referenceId:payment.id,type:'PAYMENT'}});
+          }
+        }
+      }
+
+      // 3. Revert Financial Account
+      if (payment.accountId) {
+        const account = await tx.financialAccount.findUnique({ where: { id: payment.accountId } });
+        if (account) {
+          const newAccBal =
+            payment.type === 'CUSTOMER_PAYMENT'
+              ? roundMoney(account.currentBalance - amount)
+              : roundMoney(account.currentBalance + amount);
+
+          await tx.financialAccount.update({
+            where: { id: account.id },
+            data: { currentBalance: newAccBal },
+          });
+
+          await tx.financialTransaction.deleteMany({
+            where: { referenceId: payment.id },
+          });
+        }
+      }
+
+      await tx.paymentAllocation.deleteMany({ where: { paymentId: payment.id } });
+      await tx.payment.delete({ where: { id: payment.id } });
+    });
+
+    await logAudit(userId, 'DELETE_PAYMENT', 'Payment', payment.id, {
+      paymentNumber: payment.paymentNumber,
+      type: payment.type,
+      amount,
+    });
+
+    return {
+      success: true,
+      message: `Payment ${payment.paymentNumber} deleted and reversed successfully`,
     };
   }
 }

@@ -148,6 +148,7 @@ export class SupplierService {
       alternatePhone?: string;
       address?: string;
       notes?: string;
+      isActive?: boolean;
       userId?: string;
     }
   ) {
@@ -160,11 +161,47 @@ export class SupplierService {
         alternatePhone: data.alternatePhone?.trim(),
         address: data.address?.trim(),
         notes: data.notes,
+        isActive: data.isActive,
       },
     });
 
     await logAudit(data.userId, 'UPDATE_SUPPLIER', 'Supplier', supplier.id, data);
     return supplier;
+  }
+
+  static async deleteSupplier(id: string, userId?: string) {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            purchases: true,
+            payments: true,
+            purchaseReturns: true,
+          },
+        },
+      },
+    });
+
+    if (!supplier) throw new AppError('Supplier not found', 404);
+
+    if (supplier.openingBalance !== 0 || supplier.currentBalance !== 0) throw new AppError('Cannot delete supplier with an opening or outstanding balance', 400);
+
+    const { purchases, payments, purchaseReturns } = supplier._count;
+    if (purchases > 0 || payments > 0 || purchaseReturns > 0) {
+      throw new AppError(
+        `Cannot delete supplier "${supplier.name}" because they have ${purchases} purchase(s), ${payments} payment(s), and ${purchaseReturns} return(s). To disable this supplier, deactivate them instead.`,
+        400
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.supplierLedgerEntry.deleteMany({ where: { supplierId: id } });
+      await tx.supplier.delete({ where: { id } });
+    });
+
+    await logAudit(userId, 'DELETE_SUPPLIER', 'Supplier', id, { name: supplier.name });
+    return { success: true, message: `Supplier "${supplier.name}" deleted successfully` };
   }
 
   static async getSupplierStatement(
