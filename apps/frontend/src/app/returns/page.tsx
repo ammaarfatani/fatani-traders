@@ -460,9 +460,13 @@ export default function ReturnsPage() {
                         })}
                       </td>
                       <td className="py-3 px-4 font-semibold text-brand-charcoal">
-                        <Link href={`/suppliers/${r.supplierId}`} className="hover:text-brand-fabric underline decoration-dotted">
-                          {r.supplier?.name || 'Supplier'}
-                        </Link>
+                        {r.supplierId ? (
+                          <Link href={`/suppliers/${r.supplierId}`} className="hover:text-brand-fabric underline decoration-dotted">
+                            {r.supplier?.name || 'Supplier'}
+                          </Link>
+                        ) : (
+                          <span className="text-gray-500 font-normal">Unknown Supplier</span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span className="font-mono text-brand-fabric font-medium">{r.lot?.lotNumber}</span>

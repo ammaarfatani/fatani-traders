@@ -74,13 +74,15 @@ export const LotExpenseRowSchema = z.object({
 });
 
 export const PurchaseCreateSchema = z.object({
-  supplierId: z.string().min(1, 'Supplier is required'),
-  productId: z.string().min(1, 'Fabric product is required'),
+  fabricName: z.string().min(1, 'Fabric name is required').trim(),
+  supplierId: z.string().optional().nullable(),
+  productId: z.string().optional().nullable(),
   purchaseDate: z.string().or(z.date()),
+  purchaseNumber: z.string().optional(),
   invoiceRefNumber: z.string().optional(),
-  // Can input weight as kg and optional grams or direct grams
+  // Supports decimal kg (e.g. 2.5) and optional extra grams (e.g. 200)
   weightKg: z.number().positive('Weight in KG must be greater than 0'),
-  weightGrams: z.number().min(0).max(999).default(0),
+  weightGrams: z.number().min(0).default(0),
   purchaseRatePerKg: z.number().positive('Purchase rate per KG must be greater than 0'),
   expenses: z.array(LotExpenseRowSchema).default([]),
   supplierPaymentAmount: z.number().min(0).default(0),
@@ -119,17 +121,25 @@ export const SaleCreateSchema = z.object({
 });
 
 export const PaymentCreateSchema = z.object({
-  type: z.enum(['CUSTOMER_PAYMENT', 'SUPPLIER_PAYMENT']),
+  type: z.enum(['CUSTOMER_PAYMENT', 'SUPPLIER_PAYMENT', 'PURCHASE_PAYMENT']).default('SUPPLIER_PAYMENT'),
   customerId: z.string().optional().nullable(),
   supplierId: z.string().optional().nullable(),
+  purchaseId: z.string().optional().nullable(),
   accountId: z.string().optional().nullable(),
   amount: z.number().positive('Payment amount must be greater than 0'),
   paymentDate: z.string().or(z.date()),
   referenceNumber: z.string().optional(),
   notes: z.string().optional(),
-  // Optional specific invoice / purchase allocation
   saleId: z.string().optional().nullable(),
-  purchaseId: z.string().optional().nullable(),
+});
+
+export const PurchasePaymentCreateSchema = z.object({
+  purchaseId: z.string().min(1, 'Purchase selection is required'),
+  amount: z.number().positive('Payment amount must be greater than 0'),
+  paymentDate: z.string().or(z.date()),
+  referenceNumber: z.string().optional(),
+  notes: z.string().optional(),
+  accountId: z.string().optional().nullable(),
 });
 
 export const GeneralExpenseCreateSchema = z.object({

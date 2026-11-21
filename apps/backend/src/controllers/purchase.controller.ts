@@ -46,13 +46,40 @@ export class PurchaseController {
       const page = parseInt(req.query.page as string, 10) || 1;
       const limit = parseInt(req.query.limit as string, 10) || 20;
       const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+      const status = req.query.status as 'ALL' | 'PAID' | 'PARTIAL' | 'UNPAID' | undefined;
+      const supplierId = typeof req.query.supplierId === 'string' ? req.query.supplierId : undefined;
+      const unknownSupplier = req.query.unknownSupplier === 'true';
 
-      const result = await PurchaseService.getPurchases(page, limit, search);
+      const result = await PurchaseService.getPurchases(page, limit, search, status, supplierId, unknownSupplier);
       return res.status(200).json({
         success: true,
         data: result.purchases,
         summary: result.summary,
         pagination: result.pagination,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getNextNumber(req: Request, res: Response, next: NextFunction) {
+    try {
+      const nextNumber = await PurchaseService.generatePurchaseNumber();
+      return res.status(200).json({
+        success: true,
+        data: { nextNumber },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getPayable(req: Request, res: Response, next: NextFunction) {
+    try {
+      const payablePurchases = await PurchaseService.getPayablePurchases();
+      return res.status(200).json({
+        success: true,
+        data: payablePurchases,
       });
     } catch (err) {
       next(err);

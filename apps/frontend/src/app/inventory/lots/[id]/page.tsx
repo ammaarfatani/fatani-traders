@@ -120,7 +120,7 @@ export default function LotDetailPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
           <div>
             <span className="text-gray-400 uppercase text-[10px] font-semibold">Supplier</span>
-            <p className="text-sm font-bold text-brand-charcoal mt-0.5">{lot.purchase?.supplier?.name}</p>
+            <p className="text-sm font-bold text-brand-charcoal mt-0.5">{lot.purchase?.supplier?.name || 'Unknown Supplier'}</p>
           </div>
 
           <div>

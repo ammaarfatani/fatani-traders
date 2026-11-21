@@ -15,19 +15,39 @@ import {
   CheckCircle,
   Clock,
   ArrowRight,
+  Building2,
+  Package,
 } from 'lucide-react';
 
 export default function PurchasesHistoryPage() {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'COMPLETED' | 'PARTIAL' | 'UNPAID'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'PARTIAL' | 'UNPAID'>('ALL');
+  const [supplierFilter, setSupplierFilter] = useState<string>('ALL'); // 'ALL' | 'UNKNOWN' | supplierId
   const [page, setPage] = useState(1);
 
+  // Fetch suppliers for filter dropdown
+  const { data: suppliersData } = useQuery({
+    queryKey: ['suppliers-list'],
+    queryFn: () => api.get<any>('/suppliers?limit=100'),
+  });
+  const suppliers = suppliersData?.data || suppliersData?.suppliers || [];
+
+  // Build query string
+  const queryParams = new URLSearchParams({
+    page: String(page),
+    limit: '50',
+  });
+  if (search) queryParams.set('search', search);
+  if (statusFilter !== 'ALL') queryParams.set('status', statusFilter);
+  if (supplierFilter === 'UNKNOWN') {
+    queryParams.set('unknownSupplier', 'true');
+  } else if (supplierFilter !== 'ALL') {
+    queryParams.set('supplierId', supplierFilter);
+  }
+
   const { data, isLoading } = useQuery({
-    queryKey: ['purchases', page, search],
-    queryFn: () =>
-      api.get<any>(
-        `/purchases?page=${page}&limit=50${search ? `&search=${encodeURIComponent(search)}` : ''}`
-      ),
+    queryKey: ['purchases', page, search, statusFilter, supplierFilter],
+    queryFn: () => api.get<any>(`/purchases?${queryParams.toString()}`),
   });
 
   const purchasesList = data?.data || data?.purchases || [];
@@ -35,19 +55,8 @@ export default function PurchasesHistoryPage() {
     totalPurchases: purchasesList.reduce((sum: number, p: any) => sum + (p.totalLandedCost || 0), 0),
     totalPaid: purchasesList.reduce((sum: number, p: any) => sum + (p.paidAmount || 0), 0),
     totalBalance: purchasesList.reduce((sum: number, p: any) => sum + (p.balanceAmount || 0), 0),
+    totalWeightKg: 0,
   };
-
-  const filteredPurchases = purchasesList.filter((pur: any) => {
-    const isPaid = pur.balanceAmount === 0 || (pur.paidAmount >= pur.totalLandedCost && pur.totalLandedCost > 0);
-    const isPartial = pur.paidAmount > 0 && pur.balanceAmount > 0;
-    const isUnpaid = pur.paidAmount === 0;
-
-    if (statusFilter === 'ALL') return true;
-    if (statusFilter === 'COMPLETED') return isPaid;
-    if (statusFilter === 'PARTIAL') return isPartial;
-    if (statusFilter === 'UNPAID') return isUnpaid;
-    return true;
-  });
 
   return (
     <div className="space-y-5 max-w-6xl mx-auto pb-16">
@@ -62,7 +71,7 @@ export default function PurchasesHistoryPage() {
               Purchase History
             </h1>
             <p className="text-xs text-gray-500">
-              Fabric purchases, mill suppliers, landed costs & payment tracking
+              Fabric purchases, suppliers, landed costs & payment tracking
             </p>
           </div>
         </div>
@@ -77,60 +86,101 @@ export default function PurchasesHistoryPage() {
       </div>
 
       {/* Purchase Summary Banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="bg-brand-deep text-white p-5 rounded-2xl shadow-subtle">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <div className="bg-brand-deep text-white p-4 rounded-2xl shadow-subtle">
           <span className="text-[11px] font-bold uppercase tracking-wider text-brand-light/90 block mb-1">
             Total Purchases
           </span>
-          <p className="text-2xl sm:text-3xl font-extrabold text-white">
+          <p className="text-xl sm:text-2xl font-extrabold text-white">
             {formatPKR(summary.totalPurchases || 0)}
           </p>
-          <p className="text-xs text-brand-light/70 mt-1">Total landed inventory cost</p>
+          <p className="text-[11px] text-brand-light/70 mt-1">Total landed inventory cost</p>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-brand-muted shadow-subtle">
+        <div className="bg-white p-4 rounded-2xl border border-brand-muted shadow-subtle">
           <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block mb-1">
             Total Paid
           </span>
-          <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700">
+          <p className="text-xl sm:text-2xl font-extrabold text-emerald-700">
             {formatPKR(summary.totalPaid || 0)}
           </p>
-          <p className="text-xs text-gray-500 mt-1">Total payments made to suppliers</p>
+          <p className="text-[11px] text-gray-500 mt-1">Payments made for purchases</p>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-brand-muted shadow-subtle">
+        <div className="bg-white p-4 rounded-2xl border border-brand-muted shadow-subtle">
           <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 block mb-1">
             Remaining Payable
           </span>
-          <p className="text-2xl sm:text-3xl font-extrabold text-amber-700">
+          <p className="text-xl sm:text-2xl font-extrabold text-amber-700">
             {formatPKR(summary.totalBalance || 0)}
           </p>
-          <p className="text-xs text-gray-500 mt-1">Supplier balance to be settled</p>
+          <p className="text-[11px] text-gray-500 mt-1">Outstanding purchase balance</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-brand-muted shadow-subtle">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-brand-charcoal block mb-1">
+            Total Weight
+          </span>
+          <p className="text-xl sm:text-2xl font-extrabold text-brand-charcoal">
+            {((summary.totalWeightKg || 0)).toLocaleString('en-US', {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 3,
+            })}{' '}
+            KG
+          </p>
+          <p className="text-[11px] text-gray-500 mt-1">Total fabric purchased</p>
         </div>
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-brand-muted shadow-subtle flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search by purchase #, supplier, fabric, lot #, or invoice ref..."
-            className="w-full pl-10 pr-4 py-2 bg-brand-light/50 border border-brand-muted rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-fabric text-brand-charcoal"
-          />
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-brand-muted shadow-subtle space-y-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search by purchase #, supplier, fabric name, lot #..."
+              className="w-full pl-10 pr-4 py-2 bg-brand-light/50 border border-brand-muted rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-fabric text-brand-charcoal"
+            />
+          </div>
+
+          {/* Supplier Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
+            <select
+              value={supplierFilter}
+              onChange={(e) => {
+                setSupplierFilter(e.target.value);
+                setPage(1);
+              }}
+              className="px-3 py-2 bg-brand-light/50 border border-brand-muted rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-fabric text-brand-charcoal font-medium"
+            >
+              <option value="ALL">All Suppliers & Unknown</option>
+              <option value="UNKNOWN">Unknown Supplier Only</option>
+              {suppliers.map((s: any) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-          {(['ALL', 'COMPLETED', 'PARTIAL', 'UNPAID'] as const).map((st) => (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 pt-1 border-t border-gray-100">
+          {(['ALL', 'PAID', 'PARTIAL', 'UNPAID'] as const).map((st) => (
             <button
               key={st}
-              onClick={() => setStatusFilter(st)}
+              onClick={() => {
+                setStatusFilter(st);
+                setPage(1);
+              }}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
                 statusFilter === st
                   ? 'bg-brand-deep text-white shadow-sm'
@@ -138,11 +188,11 @@ export default function PurchasesHistoryPage() {
               }`}
             >
               {st === 'ALL'
-                ? 'All Purchases'
-                : st === 'COMPLETED'
+                ? 'All Statuses'
+                : st === 'PAID'
                 ? 'Fully Paid'
                 : st === 'PARTIAL'
-                ? 'Partial'
+                ? 'Partially Paid'
                 : 'Unpaid'}
             </button>
           ))}
@@ -157,11 +207,13 @@ export default function PurchasesHistoryPage() {
             Loading Purchase History...
           </p>
         </div>
-      ) : filteredPurchases.length === 0 ? (
+      ) : purchasesList.length === 0 ? (
         <div className="bg-white p-12 rounded-2xl border border-brand-muted text-center space-y-3">
           <p className="text-sm font-semibold text-gray-600">No purchase records found.</p>
           <p className="text-xs text-gray-400">
-            {search ? 'Try adjusting your search query or status filter.' : 'Record your first purchase batch to start tracking inventory.'}
+            {search || supplierFilter !== 'ALL' || statusFilter !== 'ALL'
+              ? 'Try adjusting your search query or filter options.'
+              : 'Record your first purchase batch to start tracking inventory.'}
           </p>
           <Link
             href="/purchases/new"
@@ -173,10 +225,12 @@ export default function PurchasesHistoryPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredPurchases.map((pur: any) => {
+          {purchasesList.map((pur: any) => {
             const lot = pur.lots?.[0];
-            const isFullyPaid = pur.balanceAmount === 0;
+            const isFullyPaid = pur.balanceAmount === 0 || (pur.paidAmount >= pur.totalLandedCost && pur.totalLandedCost > 0);
             const isPartial = pur.paidAmount > 0 && pur.balanceAmount > 0;
+            const fabricName = lot?.product?.name || 'Fabric Lot';
+            const supplierName = pur.supplier?.name || 'Unknown Supplier';
 
             return (
               <Link
@@ -185,7 +239,7 @@ export default function PurchasesHistoryPage() {
                 className="block bg-white p-4 sm:p-5 rounded-2xl border border-brand-muted hover:border-brand-fabric/60 transition shadow-subtle hover:shadow-md active:scale-[0.99] group"
               >
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
-                  {/* Left Column: Identifiers & Supplier */}
+                  {/* Left Column: Identifiers, Supplier, Fabric */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm text-brand-charcoal font-mono group-hover:text-brand-fabric transition-colors">
@@ -205,35 +259,40 @@ export default function PurchasesHistoryPage() {
                             : 'bg-red-50 text-red-800 border border-red-200'
                         }`}
                       >
-                        {isFullyPaid ? 'Paid' : isPartial ? 'Partial' : 'Unpaid'}
+                        {isFullyPaid ? 'Paid' : isPartial ? 'Partially Paid' : 'Unpaid'}
                       </span>
                       <span className="text-[11px] text-gray-400 flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        <span>{new Date(pur.purchaseDate).toLocaleString()}</span>
+                        <span>{new Date(pur.purchaseDate).toLocaleDateString()}</span>
                       </span>
                     </div>
 
-                    <p className="text-sm font-bold text-brand-charcoal mt-1.5 truncate">
-                      {pur.supplier?.name}
+                    {/* Fabric Name & Supplier */}
+                    <div className="mt-2 flex items-center gap-3 flex-wrap">
+                      <span className="text-sm font-bold text-brand-charcoal">
+                        {fabricName}
+                      </span>
+                      <span className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-0.5 rounded-md">
+                        {supplierName}
+                      </span>
                       {pur.invoiceRefNumber && (
-                        <span className="text-xs font-normal text-gray-500 ml-2">
+                        <span className="text-xs text-gray-400 font-normal">
                           (Ref: {pur.invoiceRefNumber})
                         </span>
                       )}
-                    </p>
+                    </div>
 
-                    {/* Product & Quantity details */}
+                    {/* Quantity & Rate details */}
                     <div className="mt-1.5 text-xs text-gray-600 space-y-0.5">
-                      <p className="truncate">
-                        <strong className="text-gray-800">{lot?.product?.name || 'Fabric Lot'}</strong>
+                      <p>
                         {lot?.purchasedGrams && (
-                          <span className="ml-2 text-gray-600">
-                            Quantity: <strong className="text-gray-800">{formatWeight(lot.purchasedGrams)}</strong>
+                          <span className="mr-3">
+                            Weight: <strong className="text-brand-charcoal font-mono">{formatWeight(lot.purchasedGrams)}</strong>
                           </span>
                         )}
                         {lot?.purchaseRatePerKg && (
-                          <span className="ml-2 text-gray-600">
-                            • Rate: <strong className="text-gray-800">Rs. {lot.purchaseRatePerKg}/KG</strong>
+                          <span>
+                            Rate: <strong className="text-brand-charcoal font-mono">Rs. {lot.purchaseRatePerKg.toLocaleString()}/KG</strong>
                           </span>
                         )}
                       </p>
@@ -244,7 +303,7 @@ export default function PurchasesHistoryPage() {
                   <div className="text-left sm:text-right shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 flex sm:flex-col justify-between sm:justify-start items-center sm:items-end">
                     <div>
                       <span className="text-[10px] text-gray-400 uppercase font-semibold block sm:inline mr-1">
-                        Total Purchase Amount:
+                        Total Landed Cost:
                       </span>
                       <span className="text-base sm:text-lg font-extrabold text-brand-charcoal">
                         {formatPKR(pur.totalLandedCost)}
@@ -270,7 +329,9 @@ export default function PurchasesHistoryPage() {
                   <span>
                     Base Cost: <strong>{formatPKR(pur.baseCost)}</strong>
                     {pur.totalExpenses > 0 && (
-                      <span> + Landed Expenses: <strong className="text-emerald-700">{formatPKR(pur.totalExpenses)}</strong></span>
+                      <span className="ml-2">
+                        + Additional Expenses: <strong className="text-brand-fabric">{formatPKR(pur.totalExpenses)}</strong>
+                      </span>
                     )}
                   </span>
                   <div className="flex items-center gap-1 text-brand-fabric font-semibold text-xs group-hover:translate-x-1 transition-transform">

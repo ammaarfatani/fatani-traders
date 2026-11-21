@@ -101,9 +101,9 @@ export class ReportService {
     const monthNetProfit = roundMoney(monthGrossProfit - monthOperatingExpenses);
 
     // 6. All-Time Totals: Purchases, Sales, Payments Received, Payments Paid
-    const [allPurchasesAgg, allSalesAgg, allReceivedAgg, allPaidAgg] = await Promise.all([
+    const [allPurchasesAgg, allSalesAgg, allReceivedAgg, allPaidAgg, allLotsWeightAgg] = await Promise.all([
       prisma.purchase.aggregate({
-        _sum: { totalLandedCost: true },
+        _sum: { totalLandedCost: true, paidAmount: true, balanceAmount: true },
       }),
       prisma.sale.aggregate({
         _sum: { grandTotal: true },
@@ -116,9 +116,16 @@ export class ReportService {
         where: { type: 'SUPPLIER_PAYMENT' },
         _sum: { amount: true },
       }),
+      prisma.purchaseLot.aggregate({
+        _sum: { purchasedGrams: true },
+      }),
     ]);
 
     const totalPurchases = roundMoney(allPurchasesAgg._sum.totalLandedCost || 0);
+    const totalPurchasePayments = roundMoney(allPurchasesAgg._sum.paidAmount || 0);
+    const totalOutstandingPurchases = roundMoney(allPurchasesAgg._sum.balanceAmount || 0);
+    const totalPurchasedWeightKg = roundMoney((allLotsWeightAgg._sum.purchasedGrams || 0) / 1000);
+
     const totalSales = roundMoney(allSalesAgg._sum.grandTotal || 0);
     const totalPaymentsReceived = roundMoney(allReceivedAgg._sum.amount || 0);
     const totalPaymentsPaid = roundMoney(allPaidAgg._sum.amount || 0);
@@ -225,6 +232,9 @@ export class ReportService {
 
     return {
       totalPurchases,
+      totalPurchasePayments,
+      totalOutstandingPurchases,
+      totalPurchasedWeightKg,
       totalSales,
       totalPaymentsReceived,
       totalPaymentsPaid,
@@ -418,7 +428,7 @@ export class ReportService {
         lotNumber: lot.lotNumber,
         productName: lot.product.name,
         category: lot.product.category.name,
-        supplierName: lot.purchase.supplier.name,
+        supplierName: lot.purchase.supplier?.name || 'Unknown Supplier',
         purchaseDate: lot.purchase.purchaseDate,
         purchasedKg: gramsToKg(lot.purchasedGrams),
         availableKg: gramsToKg(lot.availableGrams),

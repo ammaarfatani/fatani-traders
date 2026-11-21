@@ -9,17 +9,20 @@ import {
 import { logAudit } from '../middleware/audit';
 
 export class PurchaseService {
-  private static async generatePurchaseNumber(): Promise<string> {
-    const today = new Date();
-    const prefix = `PUR-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
-    const count = await prisma.purchase.count({
-      where: {
-        purchaseNumber: {
-          startsWith: prefix,
-        },
-      },
+  public static async generatePurchaseNumber(): Promise<string> {
+    const purchases = await prisma.purchase.findMany({
+      select: { purchaseNumber: true },
     });
-    return `${prefix}-${String(count + 1).padStart(4, '0')}`;
+    let maxNum = 0;
+    for (const p of purchases) {
+      const match = p.purchaseNumber.match(/^PUR-(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    const nextSeq = maxNum + 1;
+    return `PUR-${String(nextSeq).padStart(6, '0')}`;
   }
 
   private static async generateLotNumber(): Promise<string> {
@@ -36,9 +39,11 @@ export class PurchaseService {
   }
 
   static async createPurchase(data: {
-    supplierId: string;
-    productId: string;
+    fabricName?: string;
+    supplierId?: string | null;
+    productId?: string | null;
     purchaseDate: string | Date;
+    purchaseNumber?: string;
     invoiceRefNumber?: string;
     weightKg: number;
     weightGrams?: number;
@@ -58,53 +63,143 @@ export class PurchaseService {
     notes?: string;
     userId?: string;
   }) {
-    // 1. Verify supplier & product
-    const supplier = await prisma.supplier.findUnique({
-      where: { id: data.supplierId },
-    });
-    if (!supplier || !supplier.isActive) {
-      throw new AppError('Selected supplier is invalid or inactive', 400);
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        attempts++;
+        return await this.executeCreatePurchase(data);
+      } catch (err: any) {
+        if (
+          (err.message?.includes('write conflict') ||
+            err.message?.includes('deadlock') ||
+            err.message?.includes('TransientTransactionError')) &&
+          attempts < 3
+        ) {
+          await new Promise((res) => setTimeout(res, 50 * attempts));
+          continue;
+        }
+        throw err;
+      }
     }
+    throw new AppError('Purchase creation failed after retries', 500);
+  }
 
-    const product = await prisma.product.findUnique({
-      where: { id: data.productId },
-      include: { category: true },
-    });
-    if (!product || !product.isActive) {
-      throw new AppError('Selected product is invalid or inactive', 400);
-    }
-
-    // 2. Weight in integer grams
+  private static async executeCreatePurchase(data: {
+    fabricName?: string;
+    supplierId?: string | null;
+    productId?: string | null;
+    purchaseDate: string | Date;
+    purchaseNumber?: string;
+    invoiceRefNumber?: string;
+    weightKg: number;
+    weightGrams?: number;
+    purchaseRatePerKg: number;
+    expenses?: Array<{
+      category: string;
+      customName?: string;
+      amount: number;
+      isCapitalized?: boolean;
+      isPaid?: boolean;
+      paymentAccountId?: string | null;
+      date?: string | Date;
+      notes?: string;
+    }>;
+    supplierPaymentAmount?: number;
+    paymentAccountId?: string | null;
+    notes?: string;
+    userId?: string;
+  }) {
+    // 1. Weight in integer grams (supports decimal kg e.g. 2.5 KG + extra grams e.g. 200 g)
     const totalGrams = kgAndGramsToGrams(data.weightKg, data.weightGrams || 0);
     if (totalGrams <= 0) {
       throw new AppError('Total purchased weight must be greater than zero', 400);
     }
 
-    // 3. Landed Cost Calculation
+    // 2. Landed Cost Calculation
     const landedCost = calculateLandedCost(
       totalGrams,
       data.purchaseRatePerKg,
       data.expenses || []
     );
 
-    const purchaseNumber = await this.generatePurchaseNumber();
+    const purchaseNumber = data.purchaseNumber && data.purchaseNumber.trim()
+      ? data.purchaseNumber.trim()
+      : await this.generatePurchaseNumber();
     const lotNumber = await this.generateLotNumber();
 
     const supplierPayment = Math.max(0, data.supplierPaymentAmount || 0);
-
-    if (supplierPayment > landedCost.basePurchaseCost) {
-      throw new AppError('Immediate payment cannot exceed base purchase cost', 400);
+    if (supplierPayment > landedCost.totalLandedCost) {
+      throw new AppError('Immediate payment cannot exceed total landed cost', 400);
     }
 
-    const purchaseBalance = roundMoney(landedCost.basePurchaseCost - supplierPayment);
+    const purchaseBalance = roundMoney(Math.max(0, landedCost.totalLandedCost - supplierPayment));
 
-    // 4. Transactional execution
+    // 3. Transactional execution
     const result = await prisma.$transaction(async (tx) => {
-      // 4.1 Create Purchase
+      // 3.1 Transparently resolve or create internal Product entity
+      let product: { id: string; name: string } | null = null;
+      const fabricName = (data.fabricName || '').trim();
+
+      if (data.productId) {
+        product = await tx.product.findUnique({ where: { id: data.productId } });
+      }
+
+      if (!product && fabricName) {
+        product = await tx.product.findFirst({
+          where: {
+            name: { equals: fabricName, mode: 'insensitive' },
+          },
+        });
+
+        if (!product) {
+          let category = await tx.productCategory.findFirst({
+            where: { name: { equals: 'Cotton Lawn', mode: 'insensitive' } },
+          });
+          if (!category) {
+            category = await tx.productCategory.findFirst();
+          }
+          if (!category) {
+            category = await tx.productCategory.create({
+              data: {
+                name: 'General Fabrics',
+                description: 'Textile fabric rolls and thaan',
+              },
+            });
+          }
+
+          const safeCode = `FAB-${Date.now().toString().slice(-6)}`;
+          product = await tx.product.create({
+            data: {
+              name: fabricName,
+              code: safeCode,
+              categoryId: category.id,
+              defaultUnit: 'KG',
+              isActive: true,
+            },
+          });
+        }
+      }
+
+      if (!product) {
+        throw new AppError('Fabric name is required', 400);
+      }
+
+      // 3.2 Optional supplier validation
+      let supplier: any = null;
+      if (data.supplierId && data.supplierId.trim()) {
+        supplier = await tx.supplier.findUnique({
+          where: { id: data.supplierId },
+        });
+        if (!supplier || !supplier.isActive) {
+          throw new AppError('Selected supplier is invalid or inactive', 400);
+        }
+      }
+
+      // 3.3 Create Purchase
       const purchase = await tx.purchase.create({
         data: {
           purchaseNumber,
-          supplierId: data.supplierId,
+          supplierId: supplier ? supplier.id : null,
           purchaseDate: new Date(data.purchaseDate),
           invoiceRefNumber: data.invoiceRefNumber,
           baseCost: landedCost.basePurchaseCost,
@@ -116,12 +211,12 @@ export class PurchaseService {
         },
       });
 
-      // 4.2 Create Purchase Lot
+      // 3.4 Create Purchase Lot (Each purchase gets its own distinct lot)
       const lot = await tx.purchaseLot.create({
         data: {
           lotNumber,
           purchaseId: purchase.id,
-          productId: data.productId,
+          productId: product.id,
           purchasedGrams: totalGrams,
           availableGrams: totalGrams,
           soldGrams: 0,
@@ -133,11 +228,11 @@ export class PurchaseService {
         },
       });
 
-      // 4.3 Create Lot Expenses
+      // 3.5 Create Lot Expenses
       if (data.expenses && data.expenses.length > 0) {
         for (const exp of data.expenses) {
           if (exp.amount > 0) {
-            const lotExp = await tx.lotExpense.create({
+            await tx.lotExpense.create({
               data: {
                 purchaseId: purchase.id,
                 lotId: lot.id,
@@ -151,38 +246,11 @@ export class PurchaseService {
                 notes: exp.notes,
               },
             });
-
-            // If expense is paid immediately from an account
-            if (exp.isPaid && exp.paymentAccountId) {
-              const account = await tx.financialAccount.findUnique({
-                where: { id: exp.paymentAccountId },
-              });
-              if (account) {
-                const newBalance = roundMoney(account.currentBalance - exp.amount);
-                await tx.financialAccount.update({
-                  where: { id: account.id },
-                  data: { currentBalance: newBalance },
-                });
-
-                await tx.financialTransaction.create({
-                  data: {
-                    accountId: account.id,
-                    type: 'OUTFLOW',
-                    amount: exp.amount,
-                    balanceAfter: newBalance,
-                    referenceType: 'LOT_EXPENSE',
-                    referenceId: lotExp.id,
-                    date: new Date(exp.date || data.purchaseDate),
-                    description: `Landed Expense: ${exp.category} for Lot ${lotNumber}`,
-                  },
-                });
-              }
-            }
           }
         }
       }
 
-      // 4.4 Record Inventory Movement
+      // 3.6 Record Inventory Movement
       await tx.inventoryMovement.create({
         data: {
           lotId: lot.id,
@@ -192,32 +260,20 @@ export class PurchaseService {
           referenceType: 'PURCHASE',
           referenceId: purchase.id,
           date: new Date(data.purchaseDate),
-          notes: `Purchase ${purchaseNumber} - ${data.weightKg} KG at PKR ${data.purchaseRatePerKg}/KG`,
+          notes: `Purchase ${purchaseNumber} - ${product.name} (${data.weightKg} KG @ PKR ${data.purchaseRatePerKg}/KG)`,
         },
       });
 
-      // 4.5 Handle Immediate Supplier Payment
+      // 3.7 Handle Immediate Payment if greater than 0
       if (supplierPayment > 0) {
-        const payAccount = data.paymentAccountId
-          ? await tx.financialAccount.findUnique({ where: { id: data.paymentAccountId } })
-          : await tx.financialAccount.findFirst();
-
-        let newAccBalance = 0;
-        if (payAccount) {
-          newAccBalance = roundMoney(payAccount.currentBalance - supplierPayment);
-          await tx.financialAccount.update({
-            where: { id: payAccount.id },
-            data: { currentBalance: newAccBalance },
-          });
-        }
-
         const paymentNumber = `PAY-${Date.now()}`;
         const payment = await tx.payment.create({
           data: {
             paymentNumber,
             type: 'SUPPLIER_PAYMENT',
-            supplierId: data.supplierId,
-            accountId: payAccount ? payAccount.id : null,
+            supplierId: supplier ? supplier.id : null,
+            purchaseId: purchase.id,
+            accountId: data.paymentAccountId || null,
             amount: supplierPayment,
             paymentDate: new Date(data.purchaseDate),
             referenceNumber: purchaseNumber,
@@ -233,66 +289,70 @@ export class PurchaseService {
           },
         });
 
-        if (payAccount) {
-          await tx.financialTransaction.create({
+        if (supplier) {
+          const balanceAfterPurchase = roundMoney(supplier.currentBalance + landedCost.totalLandedCost);
+          await tx.supplierLedgerEntry.create({
             data: {
-              accountId: payAccount.id,
-              type: 'OUTFLOW',
-              amount: supplierPayment,
-              balanceAfter: newAccBalance,
-              referenceType: 'SUPPLIER_PAYMENT',
-              referenceId: payment.id,
+              supplierId: supplier.id,
               date: new Date(data.purchaseDate),
-              description: `Payment to supplier ${supplier.name} for ${purchaseNumber}`,
+              type: 'PURCHASE',
+              referenceNumber: purchaseNumber,
+              referenceId: purchase.id,
+              description: `Purchase of ${product.name} (${data.weightKg} KG @ ${data.purchaseRatePerKg}/KG)`,
+              debit: 0,
+              credit: landedCost.totalLandedCost,
+              runningBalance: balanceAfterPurchase,
             },
           });
+
+          const finalSupplierBalance = roundMoney(balanceAfterPurchase - supplierPayment);
+          await tx.supplierLedgerEntry.create({
+            data: {
+              supplierId: supplier.id,
+              date: new Date(data.purchaseDate),
+              type: 'PAYMENT',
+              referenceNumber: purchaseNumber,
+              referenceId: purchase.id,
+              description: `Immediate payment for ${purchaseNumber}`,
+              debit: supplierPayment,
+              credit: 0,
+              runningBalance: finalSupplierBalance,
+            },
+          });
+
+          await tx.supplier.update({
+            where: { id: supplier.id },
+            data: { currentBalance: finalSupplierBalance },
+          });
         }
-      }
-
-      // 4.6 Update Supplier Ledger & Current Balance
-      // Purchase increases payable to supplier by base cost
-      const balanceAfterPurchase = roundMoney(supplier.currentBalance + landedCost.basePurchaseCost);
-      await tx.supplierLedgerEntry.create({
-        data: {
-          supplierId: supplier.id,
-          date: new Date(data.purchaseDate),
-          type: 'PURCHASE',
-          referenceNumber: purchaseNumber,
-          referenceId: purchase.id,
-          description: `Purchase of ${product.name} (${data.weightKg} KG @ ${data.purchaseRatePerKg}/KG)`,
-          debit: 0,
-          credit: landedCost.basePurchaseCost,
-          runningBalance: balanceAfterPurchase,
-        },
-      });
-
-      let finalSupplierBalance = balanceAfterPurchase;
-      if (supplierPayment > 0) {
-        finalSupplierBalance = roundMoney(balanceAfterPurchase - supplierPayment);
+      } else if (supplier) {
+        // No immediate payment, but supplier exists: update supplier ledger
+        const balanceAfterPurchase = roundMoney(supplier.currentBalance + landedCost.totalLandedCost);
         await tx.supplierLedgerEntry.create({
           data: {
             supplierId: supplier.id,
             date: new Date(data.purchaseDate),
-            type: 'PAYMENT',
+            type: 'PURCHASE',
             referenceNumber: purchaseNumber,
             referenceId: purchase.id,
-            description: `Immediate payment via account for ${purchaseNumber}`,
-            debit: supplierPayment,
-            credit: 0,
-            runningBalance: finalSupplierBalance,
+            description: `Purchase of ${product.name} (${data.weightKg} KG @ ${data.purchaseRatePerKg}/KG)`,
+            debit: 0,
+            credit: landedCost.totalLandedCost,
+            runningBalance: balanceAfterPurchase,
           },
         });
-      }
 
-      await tx.supplier.update({
-        where: { id: supplier.id },
-        data: { currentBalance: finalSupplierBalance },
-      });
+        await tx.supplier.update({
+          where: { id: supplier.id },
+          data: { currentBalance: balanceAfterPurchase },
+        });
+      }
 
       return {
         purchase,
         lot,
         landedCost,
+        product,
       };
     });
 
@@ -304,9 +364,12 @@ export class PurchaseService {
       {
         purchaseNumber,
         lotNumber,
+        product: result.product.name,
+        supplier: data.supplierId || 'Unknown Supplier',
         totalGrams,
         totalLandedCost: landedCost.totalLandedCost,
-        actualCostPerKg: landedCost.actualCostPerKg,
+        immediatePayment: supplierPayment,
+        balance: purchaseBalance,
       }
     );
 
@@ -450,15 +513,40 @@ export class PurchaseService {
     return result;
   }
 
-  static async getPurchases(page: number = 1, limit: number = 20, search?: string) {
+  static async getPurchases(
+    page: number = 1,
+    limit: number = 20,
+    search?: string,
+    status?: 'ALL' | 'PAID' | 'PARTIAL' | 'UNPAID',
+    supplierId?: string,
+    unknownSupplier?: boolean
+  ) {
     const skip = (page - 1) * limit;
     const where: any = {};
+
+    if (unknownSupplier) {
+      where.supplierId = null;
+    } else if (supplierId) {
+      where.supplierId = supplierId;
+    }
+
+    if (status && status !== 'ALL') {
+      if (status === 'PAID') {
+        where.balanceAmount = 0;
+      } else if (status === 'UNPAID') {
+        where.paidAmount = 0;
+      } else if (status === 'PARTIAL') {
+        where.paidAmount = { gt: 0 };
+        where.balanceAmount = { gt: 0 };
+      }
+    }
 
     if (search) {
       where.OR = [
         { purchaseNumber: { contains: search, mode: 'insensitive' } },
         { invoiceRefNumber: { contains: search, mode: 'insensitive' } },
         { supplier: { name: { contains: search, mode: 'insensitive' } } },
+        { lots: { some: { product: { name: { contains: search, mode: 'insensitive' } } } } },
       ];
     }
 
@@ -477,6 +565,9 @@ export class PurchaseService {
             },
           },
           expenses: true,
+          paymentAllocations: {
+            include: { payment: true },
+          },
         },
       }),
       prisma.purchase.aggregate({
@@ -485,6 +576,19 @@ export class PurchaseService {
       }),
     ]);
 
+    // Calculate total purchased KG across matching lots
+    const allLots = await prisma.purchaseLot.aggregate({
+      where: {
+        purchase: where,
+      },
+      _sum: {
+        purchasedGrams: true,
+        availableGrams: true,
+      },
+    });
+
+    const totalWeightKg = (allLots._sum.purchasedGrams || 0) / 1000;
+
     return {
       purchases,
       summary: {
@@ -492,6 +596,7 @@ export class PurchaseService {
         totalBaseCost: roundMoney(summaryAgg._sum.baseCost || 0),
         totalPaid: roundMoney(summaryAgg._sum.paidAmount || 0),
         totalBalance: roundMoney(summaryAgg._sum.balanceAmount || 0),
+        totalWeightKg,
       },
       pagination: {
         page,
@@ -500,6 +605,43 @@ export class PurchaseService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  static async getPayablePurchases() {
+    const purchases = await prisma.purchase.findMany({
+      where: {
+        balanceAmount: { gt: 0 },
+      },
+      orderBy: { purchaseDate: 'desc' },
+      include: {
+        supplier: { select: { id: true, name: true, phone: true } },
+        lots: {
+          include: {
+            product: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    return purchases.map((p) => {
+      const fabricName = p.lots[0]?.product?.name || 'Fabric';
+      const supplierName = p.supplier?.name || 'Unknown Supplier';
+      return {
+        id: p.id,
+        purchaseNumber: p.purchaseNumber,
+        purchaseDate: p.purchaseDate,
+        fabricName,
+        supplierName,
+        supplierId: p.supplierId,
+        totalLandedCost: p.totalLandedCost,
+        baseCost: p.baseCost,
+        paidAmount: p.paidAmount,
+        balanceAmount: p.balanceAmount,
+        displayText: `${p.purchaseNumber} — ${fabricName} — Rs. ${p.balanceAmount.toLocaleString()} Remaining${
+          p.supplier ? ` (${p.supplier.name})` : ' (Unknown Supplier)'
+        }`,
+      };
+    });
   }
 
   static async getPurchaseById(id: string) {

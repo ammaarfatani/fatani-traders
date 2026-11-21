@@ -378,7 +378,7 @@ export default function DashboardPage() {
                   >
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-brand-charcoal truncate">
-                        {pur.supplier?.name}
+                        {pur.supplier?.name || 'Unknown Supplier'}
                       </p>
                       <p className="text-[11px] text-gray-500 mt-0.5">
                         <span className="font-mono text-gray-600">{pur.purchaseNumber}</span> •{' '}
@@ -481,7 +481,7 @@ export default function DashboardPage() {
                     >
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-brand-charcoal truncate">
-                          {p.supplier?.name}
+                          {p.supplier?.name || 'Unknown Supplier'}
                         </p>
                         <p className="text-[11px] text-gray-500 mt-0.5">
                           Ref: <span className="font-mono text-gray-700">{purRef}</span> •{' '}

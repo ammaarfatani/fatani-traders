@@ -31,13 +31,13 @@ export default function PurchaseDetailPage() {
 
   // Landed Expense Modal State
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
-  const [expenseCategory, setExpenseCategory] = useState<string>('Packaging');
+  const [expenseCategory, setExpenseCategory] = useState<string>('Transport');
   const [customExpenseName, setCustomExpenseName] = useState('');
   const [expenseAmount, setExpenseAmount] = useState<number | ''>('');
   const [expenseNotes, setExpenseNotes] = useState('');
   const [expenseModalError, setExpenseModalError] = useState<string | null>(null);
 
-  // Supplier Payment Modal State
+  // Purchase Payment Modal State
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
@@ -76,7 +76,9 @@ export default function PurchaseDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['supplier', purchase?.supplierId] });
+      if (purchase?.supplierId) {
+        queryClient.invalidateQueries({ queryKey: ['supplier', purchase.supplierId] });
+      }
       setIsPaymentModalOpen(false);
       setPaymentAmount('');
       setPaymentRef('');
@@ -84,7 +86,7 @@ export default function PurchaseDetailPage() {
       setPaymentModalError(null);
     },
     onError: (err: any) => {
-      setPaymentModalError(err.message || 'Failed to record supplier payment');
+      setPaymentModalError(err.message || 'Failed to record payment');
     },
   });
 
@@ -104,11 +106,15 @@ export default function PurchaseDetailPage() {
       setPaymentModalError('Payment amount must be greater than zero');
       return;
     }
+    if (Number(paymentAmount) > purchase.balanceAmount) {
+      setPaymentModalError(`Payment amount cannot exceed remaining balance (${formatPKR(purchase.balanceAmount)})`);
+      return;
+    }
     setPaymentModalError(null);
     recordPaymentMutation.mutate({
       type: 'SUPPLIER_PAYMENT',
-      supplierId: purchase.supplierId,
       purchaseId: purchase.id,
+      supplierId: purchase.supplierId || undefined,
       amount: Number(paymentAmount),
       paymentDate: new Date(paymentDate).toISOString(),
       referenceNumber: paymentRef || purchase.purchaseNumber,
@@ -150,6 +156,8 @@ export default function PurchaseDetailPage() {
   }
 
   const paymentAllocations = purchase.paymentAllocations || [];
+  const supplierName = purchase.supplier?.name || 'Unknown Supplier';
+  const fabricName = lot?.product?.name || 'Fabric Lot';
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-16">
@@ -174,7 +182,7 @@ export default function PurchaseDetailPage() {
               )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
-              Purchased on {new Date(purchase.purchaseDate).toLocaleDateString()} from {purchase.supplier?.name}
+              Purchased on {new Date(purchase.purchaseDate).toLocaleDateString()} from <span className="font-semibold text-brand-charcoal">{supplierName}</span>
             </p>
           </div>
         </div>
@@ -186,7 +194,7 @@ export default function PurchaseDetailPage() {
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-sm transition"
             >
               <Banknote className="w-4 h-4" />
-              <span>+ Pay Supplier</span>
+              <span>+ Pay Purchase</span>
             </button>
           )}
 
@@ -209,15 +217,15 @@ export default function PurchaseDetailPage() {
             Base Purchase Cost
           </span>
           <p className="text-xl font-extrabold text-brand-charcoal">{formatPKR(purchase.baseCost)}</p>
-          <p className="text-[11px] text-gray-500 mt-0.5">Mill fabric price</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">Weight × Rate</p>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-brand-muted shadow-subtle">
           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">
-            Landed Expenses
+            Additional Expenses
           </span>
           <p className="text-xl font-extrabold text-emerald-700">{formatPKR(purchase.totalExpenses || 0)}</p>
-          <p className="text-[11px] text-gray-500 mt-0.5">Freight, labor, folding</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">Transport, labor, packaging</p>
         </div>
 
         <div className="bg-brand-deep text-white p-4 rounded-2xl shadow-subtle">
@@ -260,20 +268,20 @@ export default function PurchaseDetailPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
             <div>
-              <span className="text-gray-400 block mb-0.5">Product</span>
-              <p className="font-bold text-brand-charcoal text-sm">{lot.product?.name}</p>
+              <span className="text-gray-400 block mb-0.5">Fabric Name</span>
+              <p className="font-bold text-brand-charcoal text-sm">{fabricName}</p>
             </div>
             <div>
               <span className="text-gray-400 block mb-0.5">Initial Weight</span>
-              <p className="font-bold text-brand-charcoal text-sm">{formatWeight(lot.purchasedGrams)}</p>
+              <p className="font-bold text-brand-charcoal text-sm font-mono">{formatWeight(lot.purchasedGrams)}</p>
             </div>
             <div>
               <span className="text-gray-400 block mb-0.5">Available In Stock</span>
-              <p className="font-bold text-emerald-700 text-sm">{formatWeight(lot.availableGrams)}</p>
+              <p className="font-bold text-emerald-700 text-sm font-mono">{formatWeight(lot.availableGrams)}</p>
             </div>
             <div>
-              <span className="text-gray-400 block mb-0.5">Initial Rate</span>
-              <p className="font-bold text-brand-charcoal text-sm font-mono">Rs. {lot.purchaseRatePerKg} / KG</p>
+              <span className="text-gray-400 block mb-0.5">Purchase Rate</span>
+              <p className="font-bold text-brand-charcoal text-sm font-mono">Rs. {lot.purchaseRatePerKg.toLocaleString()} / KG</p>
             </div>
           </div>
         </div>
@@ -284,7 +292,7 @@ export default function PurchaseDetailPage() {
         <div className="flex items-center justify-between pb-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <Calculator className="w-5 h-5 text-brand-fabric" />
-            <h2 className="font-bold text-base text-brand-charcoal">Landed Expenses Breakdown</h2>
+            <h2 className="font-bold text-base text-brand-charcoal">Additional Expenses Breakdown</h2>
           </div>
           {lot && (
             <button
@@ -299,7 +307,7 @@ export default function PurchaseDetailPage() {
 
         {!lot?.expenses || lot.expenses.length === 0 ? (
           <p className="text-xs text-gray-400 py-4 text-center">
-            No landed expenses capitalized into this lot.
+            No additional expenses recorded for this purchase.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -334,15 +342,19 @@ export default function PurchaseDetailPage() {
         <div className="flex items-center justify-between pb-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <ArrowUpRight className="w-5 h-5 text-amber-700" />
-            <h2 className="font-bold text-base text-brand-charcoal">Supplier Payment History</h2>
+            <h2 className="font-bold text-base text-brand-charcoal">Purchase Payment History</h2>
           </div>
-          {purchase.balanceAmount > 0 && (
+          {purchase.balanceAmount > 0 ? (
             <button
               onClick={handleOpenPaymentModal}
               className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs transition"
             >
-              + Pay Supplier
+              + Pay Purchase
             </button>
+          ) : (
+            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+              ✓ Fully Paid
+            </span>
           )}
         </div>
 
@@ -388,14 +400,14 @@ export default function PurchaseDetailPage() {
         )}
       </div>
 
-      {/* Record Supplier Payment Modal */}
+      {/* Record Purchase Payment Modal */}
       {isPaymentModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-brand-muted space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <Banknote className="w-5 h-5 text-amber-700" />
-                <h3 className="font-bold text-base text-brand-charcoal">Pay Supplier</h3>
+                <h3 className="font-bold text-base text-brand-charcoal">Pay Purchase</h3>
               </div>
               <button
                 onClick={() => setIsPaymentModalOpen(false)}
@@ -412,14 +424,15 @@ export default function PurchaseDetailPage() {
             )}
 
             <form onSubmit={handlePaymentSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="font-semibold text-gray-700 block mb-1">Supplier</label>
-                <input
-                  type="text"
-                  value={purchase.supplier?.name}
-                  disabled
-                  className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-xl font-bold text-brand-charcoal"
-                />
+              <div className="bg-brand-light/60 p-3 rounded-xl space-y-1.5 border border-brand-muted">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Purchase / Lot:</span>
+                  <span className="font-bold font-mono text-brand-charcoal">{purchase.purchaseNumber} ({fabricName})</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Supplier:</span>
+                  <span className="font-semibold text-brand-charcoal">{supplierName}</span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

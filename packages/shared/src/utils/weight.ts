@@ -4,10 +4,10 @@
  * All internal weights are stored as integer grams to prevent floating-point drift.
  */
 
-export function kgAndGramsToGrams(kg: number, grams: number = 0): number {
-  const safeKg = Math.max(0, Math.floor(kg || 0));
-  const safeGrams = Math.max(0, Math.round(grams || 0));
-  return safeKg * 1000 + safeGrams;
+export function kgAndGramsToGrams(kg: number, extraGrams: number = 0): number {
+  const safeKgGrams = Math.round((Math.max(0, kg) || 0) * 1000);
+  const safeExtraGrams = Math.round(Math.max(0, extraGrams) || 0);
+  return safeKgGrams + safeExtraGrams;
 }
 
 export function decimalKgToGrams(kgDecimal: number): number {

@@ -30,6 +30,8 @@ router.use(requireAuth);
 // Purchases & Lots
 router.post('/purchases', PurchaseController.create);
 router.get('/purchases', PurchaseController.list);
+router.get('/purchases/next-number', PurchaseController.getNextNumber);
+router.get('/purchases/payable', PurchaseController.getPayable);
 router.get('/purchases/:id', PurchaseController.getById);
 router.post('/purchases/lots/:lotId/expense', PurchaseController.addExpense);
 

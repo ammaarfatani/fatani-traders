@@ -198,6 +198,148 @@ export class PaymentService {
     return result;
   }
 
+  static async recordPurchasePayment(data: {
+    purchaseId: string;
+    amount: number;
+    paymentDate: string | Date;
+    referenceNumber?: string;
+    notes?: string;
+    accountId?: string | null;
+    userId?: string;
+  }) {
+    if (data.amount <= 0) {
+      throw new AppError('Payment amount must be greater than zero', 400);
+    }
+
+    const purchase = await prisma.purchase.findUnique({
+      where: { id: data.purchaseId },
+      include: {
+        supplier: true,
+        lots: { include: { product: true } },
+      },
+    });
+
+    if (!purchase) {
+      throw new AppError('Purchase record not found', 404);
+    }
+
+    if (data.amount > purchase.balanceAmount) {
+      throw new AppError(
+        `Payment amount (PKR ${data.amount}) cannot exceed remaining balance (PKR ${purchase.balanceAmount})`,
+        400
+      );
+    }
+
+    const account = data.accountId
+      ? await prisma.financialAccount.findUnique({ where: { id: data.accountId } })
+      : null;
+
+    const paymentNumber = await this.generatePaymentNumber();
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Create Payment record linked to purchase
+      const payment = await tx.payment.create({
+        data: {
+          paymentNumber,
+          type: 'SUPPLIER_PAYMENT',
+          supplierId: purchase.supplierId || null,
+          purchaseId: purchase.id,
+          accountId: account ? account.id : null,
+          amount: data.amount,
+          paymentDate: new Date(data.paymentDate),
+          referenceNumber: data.referenceNumber || purchase.purchaseNumber,
+          notes: data.notes || `Payment for purchase ${purchase.purchaseNumber}`,
+        },
+      });
+
+      // 2. Outflow from Financial Account if one is provided
+      let newAccBalance = 0;
+      if (account) {
+        newAccBalance = roundMoney(account.currentBalance - data.amount);
+        await tx.financialAccount.update({
+          where: { id: account.id },
+          data: { currentBalance: newAccBalance },
+        });
+
+        await tx.financialTransaction.create({
+          data: {
+            accountId: account.id,
+            type: 'OUTFLOW',
+            amount: data.amount,
+            balanceAfter: newAccBalance,
+            referenceType: 'SUPPLIER_PAYMENT',
+            referenceId: payment.id,
+            date: new Date(data.paymentDate),
+            description: `Payment for purchase ${purchase.purchaseNumber}`,
+          },
+        });
+      }
+
+      // 3. Purchase Allocation
+      await tx.paymentAllocation.create({
+        data: {
+          paymentId: payment.id,
+          purchaseId: purchase.id,
+          amount: data.amount,
+        },
+      });
+
+      const newPaid = roundMoney(purchase.paidAmount + data.amount);
+      const newBal = roundMoney(purchase.balanceAmount - data.amount);
+      const updatedPurchase = await tx.purchase.update({
+        where: { id: purchase.id },
+        data: {
+          paidAmount: newPaid,
+          balanceAmount: newBal,
+        },
+      });
+
+      // 4. Update Supplier Ledger if supplier is present on the purchase
+      if (purchase.supplierId && purchase.supplier) {
+        const newSupplierBalance = roundMoney(purchase.supplier.currentBalance - data.amount);
+        await tx.supplierLedgerEntry.create({
+          data: {
+            supplierId: purchase.supplier.id,
+            date: new Date(data.paymentDate),
+            type: 'PAYMENT',
+            referenceNumber: paymentNumber,
+            referenceId: purchase.id,
+            description: data.notes || `Payment for purchase ${purchase.purchaseNumber}`,
+            debit: data.amount,
+            credit: 0,
+            runningBalance: newSupplierBalance,
+          },
+        });
+
+        await tx.supplier.update({
+          where: { id: purchase.supplier.id },
+          data: { currentBalance: newSupplierBalance },
+        });
+      }
+
+      return {
+        payment,
+        purchase: updatedPurchase,
+        remainingBalance: newBal,
+      };
+    });
+
+    await logAudit(
+      data.userId,
+      'RECORD_PURCHASE_PAYMENT',
+      'Payment',
+      result.payment.id,
+      {
+        paymentNumber,
+        purchaseNumber: purchase.purchaseNumber,
+        amount: data.amount,
+        remainingBalance: result.remainingBalance,
+      }
+    );
+
+    return result;
+  }
+
   static async recordSupplierPayment(data: {
     supplierId: string;
     accountId?: string | null;
@@ -400,10 +542,23 @@ export class PaymentService {
           customer: { select: { id: true, name: true, phone: true } },
           supplier: { select: { id: true, name: true, phone: true } },
           account: { select: { id: true, name: true, type: true } },
+          purchase: {
+            select: {
+              id: true,
+              purchaseNumber: true,
+              lots: { select: { product: { select: { name: true } } } },
+            },
+          },
           allocations: {
             include: {
               sale: { select: { id: true, invoiceNumber: true } },
-              purchase: { select: { id: true, purchaseNumber: true } },
+              purchase: {
+                select: {
+                  id: true,
+                  purchaseNumber: true,
+                  lots: { select: { product: { select: { name: true } } } },
+                },
+              },
             },
           },
         },

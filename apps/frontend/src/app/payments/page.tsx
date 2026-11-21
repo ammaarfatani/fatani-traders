@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatPKR } from '@fatani/shared';
@@ -18,18 +19,19 @@ import {
   User,
   Building2,
   CheckCircle,
+  Package,
 } from 'lucide-react';
 
 export default function PaymentsPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
-  // Active section: 'RECEIVED' (Customer Inflow) or 'PAID' (Supplier Outflow)
+  // Active section: 'RECEIVED' (Customer Inflow) or 'PAID' (Purchase Outflow)
   const [activeTab, setActiveTab] = useState<'RECEIVED' | 'PAID'>('RECEIVED');
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
 
-  // Sync tab with URL search parameter if present (?tab=received or ?tab=paid)
+  // Sync tab with URL search parameter if present (?tab=paid or ?tab=received)
   useEffect(() => {
     const tabParam = searchParams.get('tab');
     if (tabParam === 'paid' || tabParam === 'SUPPLIER_PAYMENT') {
@@ -43,9 +45,9 @@ export default function PaymentsPage() {
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
 
-  // Form Fields (Clean & Simple: Customer/Supplier, Amount, Date, Reference, Notes)
+  // Form Fields
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [selectedSupplierId, setSelectedSupplierId] = useState('');
+  const [selectedPurchaseId, setSelectedPurchaseId] = useState('');
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [refNumber, setRefNumber] = useState('');
@@ -69,19 +71,22 @@ export default function PaymentsPage() {
     queryFn: () => api.get<any>('/customers?limit=100'),
   });
 
-  const { data: suppliersData } = useQuery({
-    queryKey: ['suppliers'],
-    queryFn: () => api.get<any>('/suppliers?limit=100'),
+  const { data: payablePurchasesData } = useQuery({
+    queryKey: ['payable-purchases'],
+    queryFn: () => api.get<any>('/purchases/payable'),
+    enabled: isPayModalOpen,
   });
 
   const payments = paymentsData?.data || [];
   const summary = paymentsData?.summary || { totalReceived: 0, totalPaid: 0 };
   const customers = customersData?.data || customersData?.customers || [];
-  const suppliers = suppliersData?.data || suppliersData?.suppliers || [];
+  const payablePurchases = payablePurchasesData?.data || [];
+
+  const selectedPurchase = payablePurchases.find((p: any) => p.id === selectedPurchaseId);
 
   const resetForm = () => {
     setSelectedCustomerId('');
-    setSelectedSupplierId('');
+    setSelectedPurchaseId('');
     setPaymentAmount('');
     setPaymentDate(new Date().toISOString().split('T')[0]);
     setRefNumber('');
@@ -94,10 +99,9 @@ export default function PaymentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['customers'] });
-      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
+      queryClient.invalidateQueries({ queryKey: ['payable-purchases'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setIsReceiveModalOpen(false);
       setIsPayModalOpen(false);
       resetForm();
@@ -128,23 +132,31 @@ export default function PaymentsPage() {
     });
   };
 
-  const handlePaySubmit = (e: React.FormEvent) => {
+  const handlePayPurchaseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSupplierId) {
-      setFormError('Please select a supplier');
+    if (!selectedPurchaseId || !selectedPurchase) {
+      setFormError('Please select a purchase / fabric lot to pay');
       return;
     }
     if (!paymentAmount || Number(paymentAmount) <= 0) {
       setFormError('Please enter a valid payment amount');
       return;
     }
+    if (Number(paymentAmount) > selectedPurchase.balanceAmount) {
+      setFormError(
+        `Payment amount cannot exceed the remaining balance (${formatPKR(selectedPurchase.balanceAmount)})`
+      );
+      return;
+    }
+
     setFormError(null);
     paymentMutation.mutate({
       type: 'SUPPLIER_PAYMENT',
-      supplierId: selectedSupplierId,
+      purchaseId: selectedPurchase.id,
+      supplierId: selectedPurchase.supplierId || undefined,
       amount: Number(paymentAmount),
       paymentDate: new Date(paymentDate).toISOString(),
-      referenceNumber: refNumber || undefined,
+      referenceNumber: refNumber || selectedPurchase.purchaseNumber,
       notes: paymentNotes || undefined,
     });
   };
@@ -162,7 +174,7 @@ export default function PaymentsPage() {
               Payments
             </h1>
             <p className="text-xs text-gray-500">
-              Simple cash inflows from customers and payouts to suppliers
+              Cash inflows from customers and payments for fabric purchases
             </p>
           </div>
         </div>
@@ -187,7 +199,7 @@ export default function PaymentsPage() {
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition active:scale-95"
           >
             <ArrowUpRight className="w-4 h-4" />
-            <span>+ Pay Supplier</span>
+            <span>+ Pay Purchase</span>
           </button>
         </div>
       </div>
@@ -236,7 +248,7 @@ export default function PaymentsPage() {
               activeTab === 'RECEIVED' ? 'text-emerald-200/80' : 'text-gray-500'
             }`}
           >
-            Money actually received from customers • Click to view history
+            Money received from customers • Click to view history
           </p>
         </button>
 
@@ -282,7 +294,7 @@ export default function PaymentsPage() {
               activeTab === 'PAID' ? 'text-amber-200/80' : 'text-gray-500'
             }`}
           >
-            Money actually paid to suppliers • Click to view history
+            Payments made for fabric purchases • Click to view history
           </p>
         </button>
       </div>
@@ -334,7 +346,7 @@ export default function PaymentsPage() {
             placeholder={
               activeTab === 'RECEIVED'
                 ? 'Search customer name, invoice ref, payment #...'
-                : 'Search supplier name, purchase ref, payment #...'
+                : 'Search purchase #, fabric name, supplier, payment #...'
             }
             className="w-full pl-10 pr-4 py-2 bg-brand-light/50 border border-brand-muted rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-fabric text-brand-charcoal"
           />
@@ -355,7 +367,7 @@ export default function PaymentsPage() {
             <p className="text-sm font-semibold text-gray-600">
               {activeTab === 'RECEIVED'
                 ? 'No customer payments recorded yet.'
-                : 'No supplier payments recorded yet.'}
+                : 'No purchase payments recorded yet.'}
             </p>
             <p className="text-xs text-gray-400">
               {searchTerm
@@ -370,7 +382,7 @@ export default function PaymentsPage() {
                 <tr className="bg-brand-light/60 border-b border-brand-muted text-gray-500 text-left font-bold uppercase tracking-wider text-[10px]">
                   <th className="py-3.5 px-4">Date</th>
                   <th className="py-3.5 px-4">
-                    {activeTab === 'RECEIVED' ? 'Customer' : 'Supplier'}
+                    {activeTab === 'RECEIVED' ? 'Customer' : 'Supplier / Purchase'}
                   </th>
                   <th className="py-3.5 px-4">Reference</th>
                   <th className="py-3.5 px-4">Payment #</th>
@@ -380,15 +392,17 @@ export default function PaymentsPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {payments.map((p: any) => {
+                  const linkedPurchase = p.purchase || p.allocations?.[0]?.purchase;
+                  const fabricName = linkedPurchase?.lots?.[0]?.product?.name;
                   const partyName =
                     activeTab === 'RECEIVED'
                       ? p.customer?.name || 'Customer'
-                      : p.supplier?.name || 'Supplier';
+                      : p.supplier?.name || 'Unknown Supplier';
 
                   const reference =
                     activeTab === 'RECEIVED'
                       ? p.allocations?.[0]?.sale?.invoiceNumber || p.referenceNumber || '-'
-                      : p.allocations?.[0]?.purchase?.purchaseNumber || p.referenceNumber || '-';
+                      : linkedPurchase?.purchaseNumber || p.referenceNumber || '-';
 
                   return (
                     <tr key={p.id} className="hover:bg-brand-light/20 transition-colors">
@@ -398,12 +412,28 @@ export default function PaymentsPage() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className="font-bold text-brand-charcoal">{partyName}</span>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-brand-charcoal">{partyName}</span>
+                          {fabricName && (
+                            <span className="text-[11px] text-gray-500 font-medium">
+                              {fabricName}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-brand-light text-brand-fabric font-bold">
-                          {reference}
-                        </span>
+                        {linkedPurchase ? (
+                          <Link
+                            href={`/purchases/${linkedPurchase.id}`}
+                            className="font-mono text-xs px-2 py-0.5 rounded bg-brand-light text-brand-fabric hover:underline font-bold"
+                          >
+                            {reference}
+                          </Link>
+                        ) : (
+                          <span className="font-mono text-xs px-2 py-0.5 rounded bg-brand-light text-brand-fabric font-bold">
+                            {reference}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-gray-500">{p.paymentNumber}</td>
                       <td className="py-3.5 px-4 text-gray-500 max-w-xs truncate">
@@ -537,14 +567,14 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* Pay Supplier Modal */}
+      {/* Pay Purchase Modal (Lot-based payment) */}
       {isPayModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-brand-muted space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <ArrowUpRight className="w-5 h-5 text-amber-700" />
-                <h3 className="font-bold text-base text-brand-charcoal">Pay Supplier</h3>
+                <h3 className="font-bold text-base text-brand-charcoal">Pay Purchase</h3>
               </div>
               <button
                 onClick={() => setIsPayModalOpen(false)}
@@ -560,23 +590,86 @@ export default function PaymentsPage() {
               </div>
             )}
 
-            <form onSubmit={handlePaySubmit} className="space-y-4 text-xs">
+            <form onSubmit={handlePayPurchaseSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="font-semibold text-gray-700 block mb-1">Select Supplier *</label>
+                <label className="font-semibold text-gray-700 block mb-1">
+                  Select Purchase / Fabric Lot *
+                </label>
                 <select
                   required
-                  value={selectedSupplierId}
-                  onChange={(e) => setSelectedSupplierId(e.target.value)}
+                  value={selectedPurchaseId}
+                  onChange={(e) => {
+                    const purId = e.target.value;
+                    setSelectedPurchaseId(purId);
+                    const selected = payablePurchases.find((p: any) => p.id === purId);
+                    if (selected) {
+                      setPaymentAmount(selected.balanceAmount);
+                      setRefNumber(`Payment for ${selected.purchaseNumber}`);
+                    } else {
+                      setPaymentAmount('');
+                      setRefNumber('');
+                    }
+                  }}
                   className="w-full px-3 py-2.5 border border-brand-muted rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-600 bg-white"
                 >
-                  <option value="">-- Choose Supplier --</option>
-                  {suppliers.map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.currentBalance > 0 ? `(Payable: ${formatPKR(s.currentBalance)})` : ''}
+                  <option value="">-- Choose Purchase / Lot --</option>
+                  {payablePurchases.length === 0 ? (
+                    <option disabled value="">
+                      No outstanding purchases found
                     </option>
-                  ))}
+                  ) : (
+                    payablePurchases.map((p: any) => (
+                      <option key={p.id} value={p.id}>
+                        {p.displayText}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
+
+              {/* Selected Purchase Card */}
+              {selectedPurchase && (
+                <div className="bg-amber-50/60 p-3.5 rounded-xl border border-amber-200 space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-600">Fabric & Lot:</span>
+                    <span className="font-bold text-brand-charcoal">
+                      {selectedPurchase.fabricName} ({selectedPurchase.purchaseNumber})
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-600">Supplier:</span>
+                    <span className="font-semibold text-brand-charcoal">
+                      {selectedPurchase.supplierName || 'Unknown Supplier'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-600">Purchase Date:</span>
+                    <span className="font-medium text-gray-700">
+                      {new Date(selectedPurchase.purchaseDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="pt-2 border-t border-amber-200/60 flex justify-between items-center">
+                    <div>
+                      <span className="text-[10px] text-gray-500 uppercase block">Total Cost</span>
+                      <span className="font-bold text-gray-800">
+                        {formatPKR(selectedPurchase.totalLandedCost)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-gray-500 uppercase block">Already Paid</span>
+                      <span className="font-semibold text-emerald-700">
+                        {formatPKR(selectedPurchase.paidAmount)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-amber-700 uppercase font-bold block">Remaining</span>
+                      <span className="font-extrabold text-amber-800 text-sm">
+                        {formatPKR(selectedPurchase.balanceAmount)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="font-bold text-brand-charcoal block mb-1">
@@ -586,9 +679,10 @@ export default function PaymentsPage() {
                   type="number"
                   required
                   min={1}
+                  max={selectedPurchase?.balanceAmount || undefined}
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                  placeholder="e.g. 20000"
+                  placeholder="Enter payment amount"
                   className="w-full px-3.5 py-2.5 border border-brand-muted rounded-xl text-sm font-bold text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-600"
                 />
               </div>
@@ -606,13 +700,13 @@ export default function PaymentsPage() {
 
               <div>
                 <label className="font-semibold text-gray-700 block mb-1">
-                  Reference (Purchase # / Cheque / Bank Transfer Ref)
+                  Payment Reference (Cash / Bank Transfer Ref)
                 </label>
                 <input
                   type="text"
                   value={refNumber}
                   onChange={(e) => setRefNumber(e.target.value)}
-                  placeholder="e.g. PUR-001 or Cash / Cheque #1029"
+                  placeholder="e.g. Cash, Cheque #1029, Meezan online"
                   className="w-full px-3 py-2 border border-brand-muted rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-600"
                 />
               </div>
@@ -623,7 +717,7 @@ export default function PaymentsPage() {
                   value={paymentNotes}
                   onChange={(e) => setPaymentNotes(e.target.value)}
                   rows={2}
-                  placeholder="Remarks on supplier payment..."
+                  placeholder="Additional remarks..."
                   className="w-full px-3 py-2 border border-brand-muted rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-600"
                 />
               </div>
@@ -638,10 +732,10 @@ export default function PaymentsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={paymentMutation.isPending}
+                  disabled={paymentMutation.isPending || !selectedPurchaseId}
                   className="px-5 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold shadow-sm transition disabled:opacity-50"
                 >
-                  {paymentMutation.isPending ? 'Recording...' : 'Confirm Supplier Payment'}
+                  {paymentMutation.isPending ? 'Recording...' : 'Confirm Payment'}
                 </button>
               </div>
             </form>
