@@ -138,6 +138,65 @@ describe('Edit/delete integrity regressions in isolated local database',()=>{
     expect(await prisma.supplierLedgerEntry.findFirst({where:{referenceId:p.purchase.id,type:'PURCHASE'}})).not.toBeNull();
     expect((await prisma.supplier.findUniqueOrThrow({where:{id:supplier.id}})).currentBalance).toBe(1000);
   });
+  it('lists immediate and later purchase payments once and reverses them with confirmed purchase deletion',async()=>{
+    const supplier=await prisma.supplier.create({data:{name:`Delete payment supplier ${Date.now()}`,phone:'03001234567'}});
+    const account=await prisma.financialAccount.create({data:{name:`Delete payment account ${Date.now()}`,type:'CASH',currentBalance:10000}});
+    const initialAccountBalance=account.currentBalance;
+    const initialSupplierBalance=supplier.currentBalance;
+    const paymentSummaryBefore=(await Payments.getPayments(1,100,'SUPPLIER_PAYMENT,PURCHASE_PAYMENT')).summary.totalPaid;
+    const dashboardBefore=(await ReportService.getDashboard()).totalPaymentsPaid;
+    const p=await Purchases.createPurchase({fabricName:`Linked payment fabric ${Date.now()}`,supplierId:supplier.id,weightKg:10,purchaseRatePerKg:100,supplierPaymentAmount:200,paymentAccountId:account.id});
+    expect((await prisma.financialAccount.findUniqueOrThrow({where:{id:account.id}})).currentBalance).toBe(9800);
+    const later=await Payments.recordPurchasePayment({purchaseId:p.purchase.id,amount:300,paymentDate:new Date(),accountId:account.id});
+    expect(later.purchase.paidAmount).toBe(500);
+    expect((await prisma.purchase.findUniqueOrThrow({where:{id:p.purchase.id}})).balanceAmount).toBe(500);
+    expect((await prisma.financialAccount.findUniqueOrThrow({where:{id:account.id}})).currentBalance).toBe(9500);
+    const listed=await Payments.getPayments(1,100,'SUPPLIER_PAYMENT,PURCHASE_PAYMENT',p.purchase.purchaseNumber);
+    const linked=listed.payments.filter((payment:any)=>payment.purchaseId===p.purchase.id || payment.allocations.some((allocation:any)=>allocation.purchaseId===p.purchase.id));
+    expect(linked).toHaveLength(2);
+    expect(linked.reduce((sum:number,payment:any)=>sum+payment.amount,0)).toBe(500);
+    expect(listed.summary.totalPaid-paymentSummaryBefore).toBe(500);
+    const detail=await Purchases.getPurchaseById(p.purchase.id);
+    expect(detail.paymentAllocations.reduce((sum:number,allocation:any)=>sum+allocation.amount,0)).toBe(500);
+    expect(detail.payments).toHaveLength(2);
+    expect((await ReportService.getDashboard()).totalPaymentsPaid-dashboardBefore).toBe(500);
+
+    await Purchases.deletePurchase(p.purchase.id);
+    expect(await prisma.purchase.findUnique({where:{id:p.purchase.id}})).toBeNull();
+    expect((await prisma.financialAccount.findUniqueOrThrow({where:{id:account.id}})).currentBalance).toBe(initialAccountBalance);
+    expect((await prisma.supplier.findUniqueOrThrow({where:{id:supplier.id}})).currentBalance).toBe(initialSupplierBalance);
+    const retained=await prisma.payment.findMany({where:{purchaseId:null,referenceNumber:p.purchase.purchaseNumber,type:'VOIDED_SUPPLIER_PAYMENT'},include:{allocations:true}});
+    expect(retained).toHaveLength(2);
+    expect(retained.reduce((sum,payment)=>sum+payment.amount,0)).toBe(500);
+    expect(retained.flatMap(payment=>payment.allocations).every(allocation=>allocation.purchaseId===null)).toBe(true);
+    const afterDeleteSummary=await Payments.getPayments(1,100,'SUPPLIER_PAYMENT,PURCHASE_PAYMENT');
+    expect(afterDeleteSummary.summary.totalPaid).toBe(paymentSummaryBefore);
+    expect(await prisma.supplierLedgerEntry.count({where:{supplierId:supplier.id,referenceId:p.purchase.id,type:'PURCHASE'}})).toBe(1);
+    expect(await prisma.supplierLedgerEntry.count({where:{supplierId:supplier.id,type:'ADJUSTMENT'}})).toBeGreaterThanOrEqual(3);
+  });
+  it('retains shared supplier payments when deleting only one allocated purchase',async()=>{
+    const supplier=await prisma.supplier.create({data:{name:`Shared payment supplier ${Date.now()}`,phone:'03001234567'}});
+    const account=await prisma.financialAccount.create({data:{name:`Shared payment account ${Date.now()}`,type:'CASH',currentBalance:1000}});
+    const p1=await Purchases.createPurchase({fabricName:'Shared payment lot one',supplierId:supplier.id,weightKg:1,purchaseRatePerKg:100});
+    const p2=await Purchases.createPurchase({fabricName:'Shared payment lot two',supplierId:supplier.id,weightKg:2,purchaseRatePerKg:100});
+    const result=await Payments.recordSupplierPayment({supplierId:supplier.id,accountId:account.id,amount:250,paymentDate:new Date(),purchaseId:p1.purchase.id});
+    await Purchases.deletePurchase(p1.purchase.id);
+    const retained=await prisma.payment.findUniqueOrThrow({where:{id:result.payment.id},include:{allocations:true}});
+    expect(retained.type).toBe('SUPPLIER_PAYMENT');
+    expect(retained.purchaseId).toBeNull();
+    expect(retained.amount).toBe(250);
+    expect(retained.allocations[0].purchaseId).toBeNull();
+    expect((await prisma.purchase.findUniqueOrThrow({where:{id:p2.purchase.id}})).paidAmount).toBe(0);
+    expect((await prisma.financialAccount.findUniqueOrThrow({where:{id:account.id}})).currentBalance).toBe(750);
+  });
+  it('includes legacy PURCHASE_PAYMENT records in the paid summary without allocation double-counting',async()=>{
+    const before=(await Payments.getPayments(1,100,'SUPPLIER_PAYMENT,PURCHASE_PAYMENT')).summary.totalPaid;
+    const payment=await prisma.payment.create({data:{paymentNumber:`LEGACY-${Date.now()}`,type:'PURCHASE_PAYMENT',amount:73,paymentDate:new Date(),referenceNumber:'Legacy migration fixture'}});
+    const result=await Payments.getPayments(1,100,'SUPPLIER_PAYMENT,PURCHASE_PAYMENT','Legacy migration fixture');
+    expect(result.payments.some(row=>row.id===payment.id)).toBe(true);
+    expect(result.summary.totalPaid-before).toBe(73);
+    await prisma.payment.delete({where:{id:payment.id}});
+  });
   it('rejects blank names and fractional inventory grams',()=>{
     expect(CustomerSchema.safeParse({name:'   ',phone:'03001234567'}).success).toBe(false);
     expect(StockAdjustmentSchema.safeParse({lotId:'test',gramsChange:0.5,reason:'Found stock',date:new Date()}).success).toBe(false);

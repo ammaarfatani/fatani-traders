@@ -246,6 +246,13 @@ export class PurchaseService {
         }
       }
 
+      const paymentAccount = supplierPayment > 0 && data.paymentAccountId
+        ? await tx.financialAccount.findUnique({where:{id:data.paymentAccountId}})
+        : null;
+      if (supplierPayment > 0 && data.paymentAccountId && !paymentAccount) {
+        throw new AppError('Selected payment account was not found',404);
+      }
+
       // 3.3 Create Purchase
       const purchase = await tx.purchase.create({
         data: {
@@ -324,7 +331,7 @@ export class PurchaseService {
             type: 'SUPPLIER_PAYMENT',
             supplierId: supplier ? supplier.id : null,
             purchaseId: purchase.id,
-            accountId: data.paymentAccountId || null,
+            accountId: paymentAccount?.id || null,
             amount: supplierPayment,
             paymentDate: purchaseDateObj,
             referenceNumber: purchaseNumber,
@@ -339,6 +346,21 @@ export class PurchaseService {
             amount: supplierPayment,
           },
         });
+
+        if (paymentAccount) {
+          const balanceAfter = roundMoney(paymentAccount.currentBalance - supplierPayment);
+          await tx.financialAccount.update({where:{id:paymentAccount.id},data:{currentBalance:balanceAfter}});
+          await tx.financialTransaction.create({data:{
+            accountId:paymentAccount.id,
+            type:'OUTFLOW',
+            amount:supplierPayment,
+            balanceAfter,
+            referenceType:'SUPPLIER_PAYMENT',
+            referenceId:payment.id,
+            date:purchaseDateObj,
+            description:`Immediate payment for purchase ${purchaseNumber}`,
+          }});
+        }
 
         if (supplier) {
           const balanceAfterPurchase = roundMoney(supplier.currentBalance + landedCost.totalLandedCost);
@@ -362,8 +384,8 @@ export class PurchaseService {
               supplierId: supplier.id,
               date: purchaseDateObj,
               type: 'PAYMENT',
-              referenceNumber: purchaseNumber,
-              referenceId: purchase.id,
+              referenceNumber: paymentNumber,
+              referenceId: payment.id,
               description: `Immediate payment for ${purchaseNumber}`,
               debit: supplierPayment,
               credit: 0,
@@ -716,6 +738,7 @@ export class PurchaseService {
         paymentAllocations: {
           include: { payment: { include: { account: true } } },
         },
+        payments: {include:{account:true,allocations:true}},
         purchaseReturns: true,
       },
     });
@@ -954,103 +977,126 @@ export class PurchaseService {
   }
 
   static async deletePurchase(id: string, userId?: string) {
-    const purchase = await prisma.purchase.findUnique({
-      where: { id },
-      include: {
-        supplier: true,
-        lots: {
-          include: {
-            saleItems: true,
-            purchaseReturns: true,
-            movements: true,
-            expenses: true,
-            costAdjustments: true,
-            adjustments: true,
-          },
+    const result = await prisma.$transaction(async (tx) => {
+      const purchase = await tx.purchase.findUnique({
+        where: { id },
+        include: {
+          supplier: true,
+          lots: {include:{saleItems:true,purchaseReturns:true,movements:true,expenses:true,costAdjustments:true,adjustments:true}},
+          expenses: true,
+          paymentAllocations: {include:{payment:{include:{allocations:true,account:true,supplier:true}}}},
+          payments: {include:{allocations:true,account:true,supplier:true}},
+          purchaseReturns: true,
         },
-        expenses: true,
-        paymentAllocations: { include: { payment: true } },
-        payments: true,
-        purchaseReturns: true,
-      },
-    });
+      });
+      if (!purchase) throw new AppError('Purchase record not found',404);
 
-    if (!purchase) {
-      throw new AppError('Purchase record not found', 404);
-    }
-
-    // 1. Dependency checks
-    for (const lot of purchase.lots) {
-      if (lot.soldGrams > 0 || lot.saleItems.length > 0) {
-        throw new AppError(
-          `This purchase cannot be deleted because ${formatWeight(lot.soldGrams)} has already been sold in ${lot.saleItems.length} sales invoice(s).`,
-          400
-        );
+      for (const lot of purchase.lots) {
+        if (lot.soldGrams > 0 || lot.saleItems.length > 0) throw new AppError(`This purchase cannot be deleted because ${formatWeight(lot.soldGrams)} has already been sold in ${lot.saleItems.length} sales invoice(s).`,400);
+        if (lot.returnedGrams > 0 || lot.purchaseReturns.length > 0) throw new AppError(`This purchase cannot be deleted because it has ${lot.purchaseReturns.length} linked purchase return(s).`,400);
       }
-      if (lot.returnedGrams > 0 || lot.purchaseReturns.length > 0) {
-        throw new AppError(
-          `This purchase cannot be deleted because it has ${lot.purchaseReturns.length} linked purchase return(s).`,
-          400
-        );
+      if (purchase.purchaseReturns.length > 0) throw new AppError('This purchase cannot be deleted because it has linked purchase returns.',400);
+      if (purchase.lots.some(l=>l.adjustments.length>0 || l.adjustedGrams!==0) || purchase.expenses.some(e=>e.isPaid || !e.isCapitalized)) throw new AppError('Cannot delete purchase with adjustments, paid expenses, or non-capitalized expense history',400);
+
+      const linkedPayments = new Map<string, any>();
+      for (const payment of purchase.payments) linkedPayments.set(payment.id,payment);
+      for (const allocation of purchase.paymentAllocations) if (allocation.payment) linkedPayments.set(allocation.payment.id,allocation.payment);
+
+      let linkedPaidAmount = 0;
+      const paymentsToVoid: Array<{payment:any;amount:number}> = [];
+      const paymentsToDetach: any[] = [];
+      for (const payment of linkedPayments.values()) {
+        const targetAllocations = payment.allocations.filter((allocation:any)=>allocation.purchaseId===purchase.id);
+        const targetAllocatedAmount = roundMoney(targetAllocations.reduce((sum:number,allocation:any)=>sum+allocation.amount,0));
+        if (payment.purchaseId===purchase.id && payment.allocations.some((allocation:any)=>allocation.purchaseId!==purchase.id)) {
+          throw new AppError(`Payment ${payment.paymentNumber} links this purchase and another purchase directly. Review its allocation before deleting.`,400);
+        }
+        const linkedAmount = targetAllocatedAmount || (payment.purchaseId===purchase.id && payment.allocations.length===0 ? payment.amount : 0);
+        if (linkedAmount<=0) continue;
+        if (!['SUPPLIER_PAYMENT','PURCHASE_PAYMENT'].includes(payment.type)) throw new AppError(`Payment ${payment.paymentNumber} has an unsupported type and requires review before deleting this purchase.`,400);
+        if (payment.supplierId !== (purchase.supplierId || null)) throw new AppError(`Payment ${payment.paymentNumber} supplier does not match this purchase. Review the payment before deleting.`,400);
+        linkedPaidAmount=roundMoney(linkedPaidAmount+linkedAmount);
+        const otherAllocations=payment.allocations.filter((allocation:any)=>allocation.purchaseId!==purchase.id);
+        const fullyAllocatedHere=otherAllocations.length===0 && Math.abs(linkedAmount-payment.amount)<0.01;
+        if (fullyAllocatedHere) paymentsToVoid.push({payment,amount:payment.amount});
+        else paymentsToDetach.push(payment);
       }
-    }
+      if (Math.abs(linkedPaidAmount-purchase.paidAmount)>=0.01) {
+        throw new AppError(`Recorded paid amount (${formatPKR(purchase.paidAmount)}) does not match linked payment records (${formatPKR(linkedPaidAmount)}). Reconcile payment history before deleting this purchase.`,400);
+      }
 
-    if (purchase.paidAmount > 0 || purchase.paymentAllocations.length > 0 || purchase.payments.length > 0) {
-      throw new AppError(
-        `This purchase cannot be deleted because it has recorded payments totaling ${formatPKR(purchase.paidAmount)}. Please delete or reverse the linked payments first.`,
-        400
-      );
-    }
-
-    if (purchase.purchaseReturns.length > 0) {
-      throw new AppError(
-        `This purchase cannot be deleted because it has linked purchase returns.`,
-        400
-      );
-    }
-
-    if (purchase.lots.some(l => l.adjustments.length > 0 || l.adjustedGrams !== 0) || purchase.expenses.some(e => e.isPaid || !e.isCapitalized)) throw new AppError('Cannot delete purchase with adjustments, paid expenses, or non-capitalized expense history', 400);
-    // 2. Perform safe atomic deletion
-    await prisma.$transaction(async (tx) => {
-      // Revert supplier balance & remove ledger entry
-      if (purchase.supplierId) {
-        const supplier = await tx.supplier.findUnique({ where: { id: purchase.supplierId } });
-        if (supplier) {
-          const newBal = roundMoney(supplier.currentBalance - purchase.baseCost);
-          await tx.supplier.update({
-            where: { id: supplier.id },
-            data: { currentBalance: newBal },
-          });
-
-          await tx.supplierLedgerEntry.deleteMany({
-            where: {
-              supplierId: supplier.id,
-              referenceId: purchase.id,
-            },
-          });
+      // Confirm that linked accounting rows can be reversed before changing any records.
+      const usedLegacySupplierRows = new Set<string>();
+      for (const {payment,amount} of paymentsToVoid) {
+        if (payment.accountId) {
+          const outflows=await tx.financialTransaction.findMany({where:{accountId:payment.accountId,referenceId:payment.id,type:'OUTFLOW'}});
+          const outflowAmount=roundMoney(outflows.reduce((sum:number,row:any)=>sum+row.amount,0));
+          if (Math.abs(outflowAmount-amount)>=0.01) throw new AppError(`Payment ${payment.paymentNumber} account transactions do not match its amount. Review the account ledger before deleting.`,400);
+        }
+        if (payment.supplierId) {
+          const directRows=await tx.supplierLedgerEntry.findMany({where:{supplierId:payment.supplierId,referenceId:payment.id,type:'PAYMENT'}});
+          let ledgerEntry=directRows.length===1 ? directRows[0] : null;
+          if (!ledgerEntry && directRows.length===0 && payment.purchaseId===purchase.id) {
+            const legacyRows=await tx.supplierLedgerEntry.findMany({where:{supplierId:payment.supplierId,referenceId:purchase.id,referenceNumber:purchase.purchaseNumber,type:'PAYMENT'}});
+            const matching=legacyRows.filter((row:any)=>!usedLegacySupplierRows.has(row.id) && Math.abs(roundMoney(row.debit-row.credit)-amount)<0.01 && new Date(row.date).toDateString()===new Date(payment.paymentDate).toDateString());
+            if (matching.length===1) { ledgerEntry=matching[0]; usedLegacySupplierRows.add(ledgerEntry.id); }
+          }
+          if (!ledgerEntry || Math.abs(roundMoney(ledgerEntry.debit-ledgerEntry.credit)-amount)>=0.01) throw new AppError(`Payment ${payment.paymentNumber} supplier ledger does not match its amount. Review supplier history before deleting.`,400);
         }
       }
 
-      await tx.supplierLedgerEntry.deleteMany({ where: { referenceId: purchase.id } });
-      // Delete lot movements, adjustments, expenses, and lots
-      for (const lot of purchase.lots) {
-        await tx.inventoryMovement.deleteMany({ where: { lotId: lot.id } });
-        await tx.inventoryAdjustment.deleteMany({ where: { lotId: lot.id } });
-        await tx.costAdjustment.deleteMany({ where: { lotId: lot.id } });
-        await tx.lotExpense.deleteMany({ where: { lotId: lot.id } });
-        await tx.purchaseLot.delete({ where: { id: lot.id } });
+      let purchaseLedgerEntry:any = null;
+      if (purchase.supplierId) {
+        const purchaseRows=await tx.supplierLedgerEntry.findMany({where:{supplierId:purchase.supplierId,referenceId:purchase.id,type:'PURCHASE'}});
+        const purchaseLedgerAmount=roundMoney(purchaseRows.reduce((sum:number,row:any)=>sum+row.credit-row.debit,0));
+        if (Math.abs(purchaseLedgerAmount-purchase.totalLandedCost)>=0.01) throw new AppError('Purchase supplier ledger does not match its landed cost. Review supplier history before deleting.',400);
+        purchaseLedgerEntry=purchaseRows[0];
       }
 
-      await tx.lotExpense.deleteMany({ where: { purchaseId: purchase.id } });
-      await tx.purchase.delete({ where: { id: purchase.id } });
+      for (const {payment,amount} of paymentsToVoid) {
+        if (payment.accountId) {
+          const account=await tx.financialAccount.findUnique({where:{id:payment.accountId}});
+          if (!account) throw new AppError(`Payment ${payment.paymentNumber} account was not found. Review before deleting.`,400);
+          const balanceAfter=roundMoney(account.currentBalance+amount);
+          await tx.financialAccount.update({where:{id:account.id},data:{currentBalance:balanceAfter}});
+          await tx.financialTransaction.create({data:{accountId:account.id,type:'INFLOW',amount,balanceAfter,referenceType:'PURCHASE_DELETE_PAYMENT_REVERSAL',referenceId:payment.id,date:new Date(),description:`Reversal of ${payment.paymentNumber} while deleting ${purchase.purchaseNumber}`}});
+        }
+        const supplierId=payment.supplierId as string | null;
+        if (supplierId) {
+          const supplier=await tx.supplier.findUniqueOrThrow({where:{id:supplierId}});
+          const runningBalance=roundMoney(supplier.currentBalance+amount);
+          await tx.supplier.update({where:{id:supplierId},data:{currentBalance:runningBalance}});
+          await tx.supplierLedgerEntry.create({data:{supplierId,date:new Date(),type:'ADJUSTMENT',referenceNumber:payment.paymentNumber,referenceId:payment.id,description:`Reversal of purchase payment while deleting ${purchase.purchaseNumber}`,debit:0,credit:amount,runningBalance}});
+        }
+        await tx.payment.update({where:{id:payment.id},data:{type:'VOIDED_SUPPLIER_PAYMENT',purchaseId:null,notes:`${payment.notes || ''}\n[Voided with deleted purchase ${purchase.purchaseNumber}]`}});
+      }
+
+      for (const payment of paymentsToDetach) await tx.payment.update({where:{id:payment.id},data:{purchaseId:null,notes:`${payment.notes || ''}\n[Purchase allocation detached by deletion of ${purchase.purchaseNumber}]`}});
+      await tx.paymentAllocation.updateMany({where:{purchaseId:purchase.id},data:{purchaseId:null}});
+
+      if (purchase.supplierId && purchaseLedgerEntry) {
+        const supplier=await tx.supplier.findUniqueOrThrow({where:{id:purchase.supplierId}});
+        const runningBalance=roundMoney(supplier.currentBalance-purchase.totalLandedCost);
+        await tx.supplier.update({where:{id:supplier.id},data:{currentBalance:runningBalance}});
+        await tx.supplierLedgerEntry.create({data:{supplierId:supplier.id,date:new Date(),type:'ADJUSTMENT',referenceNumber:purchase.purchaseNumber,referenceId:purchase.id,description:`Reversal of purchase ${purchase.purchaseNumber}`,debit:purchase.totalLandedCost,credit:0,runningBalance}});
+      }
+
+      for (const lot of purchase.lots) {
+        await tx.inventoryMovement.deleteMany({where:{lotId:lot.id}});
+        await tx.inventoryAdjustment.deleteMany({where:{lotId:lot.id}});
+        await tx.costAdjustment.deleteMany({where:{lotId:lot.id}});
+        await tx.lotExpense.deleteMany({where:{lotId:lot.id}});
+        await tx.purchaseLot.delete({where:{id:lot.id}});
+      }
+      await tx.lotExpense.deleteMany({where:{purchaseId:purchase.id}});
+      await tx.purchase.delete({where:{id:purchase.id}});
+
+      return {purchaseNumber:purchase.purchaseNumber,totalLandedCost:purchase.totalLandedCost,voidedPayments:paymentsToVoid.map(({payment,amount})=>({id:payment.id,paymentNumber:payment.paymentNumber,amount})),detachedPayments:paymentsToDetach.map(payment=>({id:payment.id,paymentNumber:payment.paymentNumber}))};
     });
 
-    await logAudit(userId, 'DELETE_PURCHASE', 'Purchase', purchase.id, {
-      purchaseNumber: purchase.purchaseNumber,
-      totalLandedCost: purchase.totalLandedCost,
-    });
-
-    return { success: true, message: `Purchase ${purchase.purchaseNumber} deleted successfully` };
+    await logAudit(userId,'DELETE_PURCHASE','Purchase',id,result);
+    for (const payment of result.voidedPayments) await logAudit(userId,'VOID_PAYMENT_WITH_PURCHASE_DELETION','Payment',payment.id,{purchaseNumber:result.purchaseNumber,paymentNumber:payment.paymentNumber,amount:payment.amount});
+    return {success:true,message:`Purchase ${result.purchaseNumber} deleted. ${result.voidedPayments.length} purchase-only payment(s) were voided; ${result.detachedPayments.length} shared payment(s) were retained.`};
   }
 
   static async updateLotExpense(

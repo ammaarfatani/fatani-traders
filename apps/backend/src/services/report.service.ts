@@ -113,7 +113,7 @@ export class ReportService {
         _sum: { amount: true },
       }),
       prisma.payment.aggregate({
-        where: { type: 'SUPPLIER_PAYMENT' },
+        where: { type: { in: ['SUPPLIER_PAYMENT', 'PURCHASE_PAYMENT'] } },
         _sum: { amount: true },
       }),
       prisma.purchaseLot.aggregate({
@@ -169,7 +169,7 @@ export class ReportService {
         },
       }),
       prisma.payment.findMany({
-        where: { type: 'SUPPLIER_PAYMENT' },
+        where: { type: { in: ['SUPPLIER_PAYMENT', 'PURCHASE_PAYMENT'] } },
         take: 5,
         orderBy: { paymentDate: 'desc' },
         include: {

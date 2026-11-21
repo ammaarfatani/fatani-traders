@@ -529,7 +529,10 @@ export class PaymentService {
   static async getPayments(page: number = 1, limit: number = 20, type?: string, search?: string) {
     const skip = (page - 1) * limit;
     const where: any = {};
-    if (type && type !== 'ALL') where.type = type;
+    if (type && type !== 'ALL') {
+      const types = type.split(',').map((value) => value.trim()).filter(Boolean);
+      where.type = types.length > 1 ? { in: types } : types[0];
+    }
 
     if (search) {
       where.OR = [
@@ -577,7 +580,7 @@ export class PaymentService {
         _sum: { amount: true },
       }),
       prisma.payment.aggregate({
-        where: { type: 'SUPPLIER_PAYMENT' },
+        where: { type: { in: ['SUPPLIER_PAYMENT', 'PURCHASE_PAYMENT'] } },
         _sum: { amount: true },
       }),
     ]);

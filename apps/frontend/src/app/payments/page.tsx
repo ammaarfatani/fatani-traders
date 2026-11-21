@@ -70,11 +70,11 @@ export default function PaymentsPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   // Queries
-  const paymentTypeParam = activeTab === 'RECEIVED' ? 'CUSTOMER_PAYMENT' : 'SUPPLIER_PAYMENT';
+  const paymentTypeParam = activeTab === 'RECEIVED' ? 'CUSTOMER_PAYMENT' : 'SUPPLIER_PAYMENT,PURCHASE_PAYMENT';
   const { data: paymentsData, isLoading } = useQuery({
     queryKey: ['payments', activeTab, page, searchTerm],
     queryFn: () =>
-      api.get<any>(
+      api.getEnvelope<any>(
         `/payments?type=${paymentTypeParam}&page=${page}&limit=50${
           searchTerm ? `&search=${encodeURIComponent(searchTerm)}` : ''
         }`
@@ -92,10 +92,10 @@ export default function PaymentsPage() {
     enabled: isPayModalOpen,
   });
 
-  const payments = paymentsData?.data || [];
+  const payments = Array.isArray(paymentsData?.data) ? paymentsData.data : Array.isArray(paymentsData) ? paymentsData : [];
   const summary = paymentsData?.summary || { totalReceived: 0, totalPaid: 0 };
-  const customers = customersData?.data || customersData?.customers || [];
-  const payablePurchases = payablePurchasesData?.data || [];
+  const customers = Array.isArray(customersData) ? customersData : customersData?.data || customersData?.customers || [];
+  const payablePurchases = Array.isArray(payablePurchasesData) ? payablePurchasesData : payablePurchasesData?.data || [];
 
   const selectedPurchase = payablePurchases.find((p: any) => p.id === selectedPurchaseId);
 

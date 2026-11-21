@@ -8,7 +8,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(endpoint: string, options: RequestInit = {}, unwrapData = true): Promise<T> {
   const url = endpoint.startsWith('http') ? endpoint : `/api${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('fatani_auth_token') : null;
@@ -36,11 +36,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     throw new ApiError(errorMsg, response.status, errorDetails);
   }
 
-  return (typeof data === 'object' && 'data' in data ? data.data : data) as T;
+  return (unwrapData && typeof data === 'object' && 'data' in data ? data.data : data) as T;
 }
 
 export const api = {
   get: <T>(endpoint: string, options?: RequestInit) => request<T>(endpoint, { method: 'GET', ...options }),
+  getEnvelope: <T>(endpoint: string, options?: RequestInit) => request<T>(endpoint, { method: 'GET', ...options }, false),
   post: <T>(endpoint: string, body?: any, options?: RequestInit) =>
     request<T>(endpoint, { method: 'POST', body: body ? JSON.stringify(body) : undefined, ...options }),
   put: <T>(endpoint: string, body?: any, options?: RequestInit) =>

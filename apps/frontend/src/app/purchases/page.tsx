@@ -406,13 +406,14 @@ export default function PurchasesHistoryPage() {
           onClose={() => setDeletingPurchase(null)}
           onConfirm={handleDeletePurchase}
           title="Delete Purchase"
-          description="Are you sure you want to permanently delete this purchase record? This action will remove the purchase and all linked lot records."
+          description="Confirm deletion of this purchase and its lot records. Purchase-only payments will be voided and reversed; shared payments will remain active but be detached from this purchase."
           itemIdentifier={`${deletingPurchase.purchaseNumber} (${deletingPurchase.lots?.[0]?.product?.name || 'Fabric'})`}
           consequences={[
             `Removes purchase record ${deletingPurchase.purchaseNumber}.`,
             'Restores inventory stock for the lot.',
             `Reverses supplier payable balance of ${formatPKR(deletingPurchase.totalLandedCost)}.`,
-            'Protected: If any fabric from this lot has already been sold or if payments have been made, deletion will be blocked.',
+            'Fully purchase-only payments are voided, their account/supplier balances are reversed, and payment/ledger audit history is retained.',
+            'Payments shared with other purchases remain active; only their allocation to this purchase is detached. Deletion is blocked if sales, returns, or payment/account ledger mismatches are found.',
           ]}
           confirmButtonText="Delete Purchase"
         />

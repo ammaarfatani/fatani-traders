@@ -178,6 +178,20 @@ export default function PurchaseDetailPage() {
   }
 
   const paymentAllocations = purchase.paymentAllocations || [];
+  const paymentHistoryById = new Map<string, {payment:any;amount:number}>();
+  for (const allocation of paymentAllocations) {
+    if (!allocation.payment) continue;
+    const existing = paymentHistoryById.get(allocation.payment.id);
+    paymentHistoryById.set(allocation.payment.id, {
+      payment: allocation.payment,
+      amount: (existing?.amount || 0) + allocation.amount,
+    });
+  }
+  for (const payment of purchase.payments || []) {
+    if (!paymentHistoryById.has(payment.id)) paymentHistoryById.set(payment.id, {payment, amount:payment.amount});
+  }
+  const paymentHistory = Array.from(paymentHistoryById.values()).sort((a,b)=>new Date(b.payment.paymentDate).getTime()-new Date(a.payment.paymentDate).getTime());
+  const paymentHistoryTotal = paymentHistory.reduce((sum,row)=>sum+row.amount,0);
   const supplierName = purchase.supplier?.name || 'Unknown Supplier';
   const fabricName = lot?.product?.name || 'Fabric Lot';
 
@@ -417,13 +431,20 @@ export default function PurchaseDetailPage() {
           )}
         </div>
 
-        {paymentAllocations.length === 0 ? (
+        {paymentHistory.length === 0 ? (
           <div className="py-6 text-center text-xs text-gray-400 space-y-2">
-            <p>No payments recorded for this purchase yet.</p>
+            {purchase.paidAmount > 0 ? (
+              <p className="font-semibold text-amber-800">This purchase records {formatPKR(purchase.paidAmount)} paid, but no linked payment records were returned. Review this payment history before changing the purchase.</p>
+            ) : <p>No payments recorded for this purchase yet.</p>}
             <p className="text-amber-700 font-semibold">Remaining balance payable: {formatPKR(purchase.balanceAmount)}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
+            {Math.abs(paymentHistoryTotal - purchase.paidAmount) >= 0.01 && (
+              <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
+                Linked payment history totals {formatPKR(paymentHistoryTotal)}, while this purchase records {formatPKR(purchase.paidAmount)} paid. Review the discrepancy before editing or deleting the purchase.
+              </p>
+            )}
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-gray-100 text-gray-400 text-left font-bold uppercase tracking-wider text-[10px]">
@@ -434,10 +455,9 @@ export default function PurchaseDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {paymentAllocations.map((alloc: any) => {
-                  const p = alloc.payment;
+                {paymentHistory.map(({payment:p,amount}: any) => {
                   return (
-                    <tr key={alloc.id} className="hover:bg-brand-light/30">
+                    <tr key={p?.id || p?._id || `${p?.paymentNumber || "payment"}-${amount}`}  className="hover:bg-brand-light/30">
                       <td className="py-3 text-gray-600 font-medium">
                         {p?.paymentDate ? new Date(p.paymentDate).toLocaleDateString() : '-'}
                       </td>
@@ -448,7 +468,7 @@ export default function PurchaseDetailPage() {
                         {p?.referenceNumber || p?.notes || 'Purchase Settlement'}
                       </td>
                       <td className="py-3 text-right font-extrabold text-amber-700">
-                        -{formatPKR(alloc.amount)}
+                        -{formatPKR(amount)}
                       </td>
                     </tr>
                   );
@@ -704,13 +724,14 @@ export default function PurchaseDetailPage() {
           onClose={() => setIsDeletePurchaseOpen(false)}
           onConfirm={handleDeletePurchase}
           title="Delete Purchase"
-          description="Are you sure you want to permanently delete this purchase record? This action will remove the purchase and all linked lot records."
+          description="Confirm deletion of this purchase and its lot records. Purchase-only payments will be voided and reversed; shared payments will remain active but be detached from this purchase."
           itemIdentifier={`${purchase.purchaseNumber} (${fabricName})`}
           consequences={[
             `Removes purchase record ${purchase.purchaseNumber} and associated lot #${lot?.lotNumber || ''}.`,
             `Restores/removes the added inventory weight of ${lot ? formatWeight(lot.purchasedGrams) : ''}.`,
             `Reverses supplier payable balance of ${formatPKR(purchase.totalLandedCost)}.`,
-            'Protected: If any fabric from this lot has already been sold or if payments have been made, deletion will be blocked.',
+            'Fully purchase-only payments are voided, their account/supplier balances are reversed, and payment/ledger audit history is retained.',
+            'Payments shared with other purchases remain active; only their allocation to this purchase is detached. Deletion is blocked if sales, returns, or payment/account ledger mismatches are found.',
           ]}
           confirmButtonText="Delete Purchase"
         />
