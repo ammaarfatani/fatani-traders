@@ -3,6 +3,13 @@ import { SaleService } from '../services/sale.service';
 import { SaleCreateSchema, SaleUpdateSchema } from '@fatani/shared';
 
 export class SaleController {
+  static async getNextNumber(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const nextNumber=await SaleService.generateInvoiceNumber();
+      return res.status(200).json({success:true,data:{nextNumber}});
+    } catch(err) { next(err); }
+  }
+
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
       const validated = SaleCreateSchema.parse(req.body);

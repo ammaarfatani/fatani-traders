@@ -42,6 +42,7 @@ router.delete('/purchases/expenses/:expenseId', PurchaseController.deleteExpense
 // Sales & Invoices
 router.post('/sales', SaleController.create);
 router.get('/sales', SaleController.list);
+router.get('/sales/next-number', SaleController.getNextNumber);
 router.get('/sales/:id', SaleController.getById);
 router.put('/sales/:id', SaleController.update);
 router.delete('/sales/:id', SaleController.delete);
@@ -92,6 +93,7 @@ router.get('/expenses/categories', ExpenseController.listCategories);
 router.post('/expenses/categories', ExpenseController.createCategory);
 router.put('/expenses/categories/:id', ExpenseController.updateCategory);
 router.delete('/expenses/categories/:id', ExpenseController.deleteCategory);
+router.get('/expenses/analytics', ExpenseController.analytics);
 router.post('/expenses', ExpenseController.create);
 router.get('/expenses', ExpenseController.list);
 router.get('/expenses/:id', ExpenseController.getById);

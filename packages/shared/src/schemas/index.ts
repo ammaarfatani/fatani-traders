@@ -124,6 +124,7 @@ export const SaleItemSchema = z.object({
 });
 
 export const SaleCreateSchema = z.object({
+  invoiceNumber: z.string().optional(),
   customerId: z.string().trim().min(1, 'Customer is required'),
   invoiceDate: z.string().or(z.date()),
   items: z.array(SaleItemSchema).min(1, 'At least one lot item is required'),

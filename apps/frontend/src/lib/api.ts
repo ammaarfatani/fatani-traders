@@ -1,10 +1,14 @@
 export class ApiError extends Error {
   statusCode: number;
   errors?: any[];
-  constructor(message: string, statusCode: number = 400, errors?: any[]) {
+  code?: string;
+  correlationId?: string;
+  constructor(message: string, statusCode: number = 400, errors?: any[], code?: string, correlationId?: string) {
     super(message);
     this.statusCode = statusCode;
     this.errors = errors;
+    this.code = code;
+    this.correlationId = correlationId;
   }
 }
 
@@ -33,7 +37,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}, unwrapDat
   if (!response.ok) {
     const errorMsg = (typeof data === 'object' && data.message) || response.statusText || 'Request failed';
     const errorDetails = typeof data === 'object' ? data.errors : undefined;
-    throw new ApiError(errorMsg, response.status, errorDetails);
+    throw new ApiError(errorMsg, response.status, errorDetails, data && typeof data === 'object' ? data.code : undefined, data && typeof data === 'object' ? data.correlationId || response.headers.get('x-correlation-id') || undefined : response.headers.get('x-correlation-id') || undefined);
   }
 
   return (unwrapData && typeof data === 'object' && 'data' in data ? data.data : data) as T;

@@ -3,6 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { prisma } from './lib/prisma';
 import { config } from './config';
@@ -44,7 +45,7 @@ app.use(
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Correlation-ID'],
   })
 );
 
@@ -52,6 +53,14 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+
+app.use((req, res, next) => {
+  const suppliedId = req.header('x-correlation-id');
+  const correlationId = suppliedId && /^[a-zA-Z0-9-]{8,64}$/.test(suppliedId) ? suppliedId : randomUUID();
+  res.locals.correlationId = correlationId;
+  res.setHeader('X-Correlation-ID', correlationId);
+  next();
+});
 
 // Request logging in development
 if (config.nodeEnv === 'development') {

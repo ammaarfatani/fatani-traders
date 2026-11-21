@@ -152,10 +152,14 @@ export default function NewPurchasePage() {
       queryClient.invalidateQueries({ queryKey: ['inventoryLots'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['suppliers'] });
-      router.push(`/purchases/${res.data.purchase.id}`);
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['profit-loss'] });
+      queryClient.invalidateQueries({ queryKey: ['cash-flow'] });
+      queryClient.invalidateQueries({ queryKey: ['nextPurchaseNumber'] });
+      router.push(`/purchases/${res.purchase.id}`);
     },
     onError: (err: any) => {
-      setFormError(err.message || 'Failed to save purchase');
+      setFormError(`${err.message || 'Failed to save purchase'}${err.correlationId ? ` (Reference: ${err.correlationId})` : ''}`);
     },
   });
 

@@ -3,6 +3,18 @@ import { ExpenseService } from '../services/expense.service';
 import { ProductCategorySchema, GeneralExpenseCreateSchema, GeneralExpenseUpdateSchema } from '@fatani/shared';
 
 export class ExpenseController {
+  static async analytics(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { startDate, endDate, categoryId } = req.query;
+      const result = await ExpenseService.getOperatingExpenseAnalytics(
+        typeof startDate === 'string' ? startDate : undefined,
+        typeof endDate === 'string' ? endDate : undefined,
+        typeof categoryId === 'string' ? categoryId : undefined,
+      );
+      return res.status(200).json({ success: true, data: result });
+    } catch (err) { next(err); }
+  }
+
   static async listCategories(_req: Request, res: Response, next: NextFunction) {
     try {
       const categories = await ExpenseService.getCategories();

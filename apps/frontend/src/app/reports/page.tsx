@@ -17,27 +17,36 @@ import {
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<'pl' | 'cashflow'>('pl');
-  const [dateRangePreset, setDateRangePreset] = useState<'month' | 'today' | 'all'>('month');
+  const [dateRangePreset, setDateRangePreset] = useState<'today' | 'yesterday' | 'week' | 'month' | 'lastMonth' | 'custom' | 'all'>('month');
+  const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
+  const [customStart, setCustomStart] = useState(`${todayKey.slice(0, 7)}-01`);
+  const [customEnd, setCustomEnd] = useState(todayKey);
 
   const dateFilter = React.useMemo(() => {
-    const today = new Date();
-    if (dateRangePreset === 'today') {
-      const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-      return `?startDate=${start}`;
-    }
-    if (dateRangePreset === 'month') {
-      const start = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-      return `?startDate=${start}`;
-    }
-    return '';
-  }, [dateRangePreset]);
+    const day = (key: string) => new Date(`${key}T00:00:00+05:00`);
+    const moveDay = (key: string, count: number) => { const value = new Date(`${key}T12:00:00Z`); value.setUTCDate(value.getUTCDate() + count); return value.toISOString().slice(0, 10); };
+    let start: string | null = null; let end: string | null = null;
+    if (dateRangePreset === 'today') start = end = todayKey;
+    else if (dateRangePreset === 'yesterday') start = end = moveDay(todayKey, -1);
+    else if (dateRangePreset === 'week') {
+      const weekday = new Date(`${todayKey}T12:00:00+05:00`).getUTCDay();
+      start = moveDay(todayKey, -((weekday + 6) % 7)); end = todayKey;
+    } else if (dateRangePreset === 'month') { start = `${todayKey.slice(0, 7)}-01`; end = todayKey; }
+    else if (dateRangePreset === 'lastMonth') {
+      const previous = new Date(`${todayKey.slice(0, 7)}-01T12:00:00Z`); previous.setUTCMonth(previous.getUTCMonth() - 1);
+      start = `${previous.toISOString().slice(0, 7)}-01`; end = moveDay(`${todayKey.slice(0, 7)}-01`, -1);
+    } else if (dateRangePreset === 'custom') { start = customStart; end = customEnd; }
+    if (!start || !end) return '';
+    const endExclusive = day(moveDay(end, 1)); endExclusive.setMilliseconds(endExclusive.getMilliseconds() - 1);
+    return `?startDate=${encodeURIComponent(day(start).toISOString())}&endDate=${encodeURIComponent(endExclusive.toISOString())}`;
+  }, [dateRangePreset, todayKey, customStart, customEnd]);
 
-  const { data: plData, isLoading: isPlLoading } = useQuery({
+  const { data: plData, isLoading: isPlLoading, isError: isPlError, error: plError, refetch: retryPl } = useQuery({
     queryKey: ['profit-loss', dateFilter],
     queryFn: () => api.get<any>(`/reports/profit-loss${dateFilter}`),
   });
 
-  const { data: cfData, isLoading: isCfLoading } = useQuery({
+  const { data: cfData, isLoading: isCfLoading, isError: isCfError, error: cfError, refetch: retryCf } = useQuery({
     queryKey: ['cash-flow', dateFilter],
     queryFn: () => api.get<any>(`/reports/cash-flow${dateFilter}`),
   });
@@ -58,31 +67,8 @@ export default function ReportsPage() {
 
         <div className="flex items-center gap-2">
           {/* Date Presets */}
-          <div className="bg-brand-light p-1 rounded-xl flex text-xs font-semibold border border-brand-muted">
-            <button
-              onClick={() => setDateRangePreset('today')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                dateRangePreset === 'today' ? 'bg-white text-brand-charcoal shadow-sm' : 'text-gray-500'
-              }`}
-            >
-              Today
-            </button>
-            <button
-              onClick={() => setDateRangePreset('month')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                dateRangePreset === 'month' ? 'bg-white text-brand-charcoal shadow-sm' : 'text-gray-500'
-              }`}
-            >
-              This Month
-            </button>
-            <button
-              onClick={() => setDateRangePreset('all')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                dateRangePreset === 'all' ? 'bg-white text-brand-charcoal shadow-sm' : 'text-gray-500'
-              }`}
-            >
-              All Time
-            </button>
+          <div className="flex flex-wrap gap-1 rounded-xl border border-brand-muted bg-brand-light p-1 text-xs font-semibold">
+            {([['today','Today'],['yesterday','Yesterday'],['week','This Week'],['month','This Month'],['lastMonth','Last Month'],['custom','Custom'],['all','All Time']] as const).map(([preset,label]) => <button key={preset} onClick={() => setDateRangePreset(preset)} className={`rounded-lg px-2 py-1.5 transition ${dateRangePreset === preset ? 'bg-white text-brand-charcoal shadow-sm' : 'text-gray-500'}`}>{label}</button>)}
           </div>
 
           <button
@@ -93,6 +79,7 @@ export default function ReportsPage() {
             <span>Print</span>
           </button>
         </div>
+        {dateRangePreset === 'custom' && <div className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-3 text-xs"><label>From <input type="date" value={customStart} onChange={event => setCustomStart(event.target.value)} className="rounded border p-2"/></label><label>To <input type="date" value={customEnd} onChange={event => setCustomEnd(event.target.value)} className="rounded border p-2"/></label></div>}
       </div>
 
       {/* Tabs */}
@@ -125,7 +112,7 @@ export default function ReportsPage() {
       {/* TAB 1: ACCRUAL PROFIT & LOSS */}
       {activeTab === 'pl' && (
         <div className="space-y-4">
-          {isPlLoading ? (
+          {isPlError ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">Profit and loss report failed to load: {plError instanceof Error ? plError.message : 'Check the connection.'}<button onClick={() => retryPl()} className="ml-3 underline">Retry</button></div> : isPlLoading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <div className="w-8 h-8 border-4 border-brand-fabric border-t-transparent rounded-full animate-spin" />
               <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Generating P&L Statement...</p>
@@ -151,9 +138,11 @@ export default function ReportsPage() {
                 </div>
                 <div className="text-right text-xs text-gray-500">
                   <span className="font-semibold text-brand-charcoal block">Reporting Period</span>
-                  <span>{dateRangePreset === 'month' ? 'Current Fiscal Month' : dateRangePreset.toUpperCase()}</span>
+                  <span>{dateRangePreset === 'lastMonth' ? 'Last Month' : dateRangePreset === 'custom' ? `${customStart} to ${customEnd}` : dateRangePreset === 'all' ? 'All Time' : dateRangePreset.toUpperCase()}</span>
                 </div>
               </div>
+
+              {plData.reconciliationWarnings?.length > 0 && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-bold">Profit needs cost reconciliation</p>{plData.reconciliationWarnings.map((warning: string) => <p key={warning} className="mt-1">{warning}</p>)}</div>}
 
               {/* 1. Revenue */}
               <div className="space-y-2 text-xs">
@@ -165,6 +154,7 @@ export default function ReportsPage() {
                     <span className="text-gray-600">Gross Invoiced Sales:</span>
                     <span className="font-semibold text-brand-charcoal">{formatPKR(plData.revenue.grossSales)}</span>
                   </div>
+                  {plData.revenue.discounts > 0 && <div className="flex justify-between text-gray-600"><span>Less: Invoice Discounts:</span><span>-{formatPKR(plData.revenue.discounts)}</span></div>}
                   {plData.revenue.salesReturns > 0 && (
                     <div className="flex justify-between text-amber-700">
                       <span>Less: Sales Returns & Credit Adjustments:</span>
@@ -177,6 +167,16 @@ export default function ReportsPage() {
                   </div>
                 </div>
               </div>
+              <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" aria-label="Cash, balances, and inventory context">
+                {[
+                  ['Payments Received in Period', plData.cashAndBalances?.paymentsReceived],
+                  ['Payments Paid in Period', plData.cashAndBalances?.paymentsPaid],
+                  ['Current Customer Receivables', plData.cashAndBalances?.customerReceivables],
+                  ['Current Purchase Payables', plData.cashAndBalances?.purchasePayables],
+                  ['Current Inventory Quantity', `${plData.inventory?.currentQuantityKg || 0} KG`],
+                  ['Current Inventory Valuation', formatPKR(plData.inventory?.currentValuation || 0)],
+                ].map(([label,value]) => <div key={String(label)} className="rounded-xl border border-brand-muted bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{label}</p><p className="mt-1 font-extrabold text-brand-charcoal">{typeof value === 'number' ? formatPKR(value) : value}</p></div>)}
+              </section>
 
               {/* 2. COGS */}
               <div className="space-y-2 text-xs">
@@ -202,17 +202,17 @@ export default function ReportsPage() {
               </div>
 
               {/* GROSS PROFIT */}
-              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 flex justify-between items-center">
+              <div className={`p-4 rounded-xl border flex justify-between items-center ${plData.grossProfit === null ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50 border-emerald-200'}`}>
                 <div>
-                  <span className="text-xs font-bold uppercase text-emerald-800 tracking-wider">
+                  <span className={`text-xs font-bold uppercase tracking-wider ${plData.grossProfit === null ? 'text-amber-900' : 'text-emerald-800'}`}>
                     Gross Profit (Margin)
                   </span>
-                  <p className="text-[11px] text-emerald-700 mt-0.5">
+                  <p className={`text-[11px] mt-0.5 ${plData.grossProfit === null ? 'text-amber-800' : 'text-emerald-700'}`}>
                     Net Sales Revenue − Net Lot Landed Cost
                   </p>
                 </div>
-                <span className="text-xl sm:text-2xl font-black text-emerald-800">
-                  {formatPKR(plData.grossProfit)}
+                <span className={`text-xl sm:text-2xl font-black ${plData.grossProfit === null ? 'text-amber-900' : 'text-emerald-800'}`}>
+                  {plData.grossProfit === null ? 'Pending cost reconciliation' : formatPKR(plData.grossProfit)}
                 </span>
               </div>
 
@@ -242,21 +242,21 @@ export default function ReportsPage() {
               {/* NET PROFIT */}
               <div
                 className={`p-5 rounded-2xl flex justify-between items-center ${
-                  plData.netProfit >= 0
+                  plData.netProfit === null ? 'bg-amber-50 text-amber-950 border border-amber-300' : plData.netProfit >= 0
                     ? 'bg-brand-deep text-white shadow-elevated border border-brand-dark/40'
                     : 'bg-red-600 text-white shadow-lg'
                 }`}
               >
                 <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-300">
+                  <span className={`text-xs font-bold uppercase tracking-wider ${plData.netProfit === null ? 'text-amber-900' : 'text-gray-300'}`}>
                     Net Profit / (Loss)
                   </span>
-                  <p className="text-xs text-gray-300 mt-0.5">
+                  <p className={`text-xs mt-0.5 ${plData.netProfit === null ? 'text-amber-800' : 'text-gray-300'}`}>
                     Gross Profit − Operating Overhead
                   </p>
                 </div>
-                <span className="text-2xl sm:text-3xl font-black text-emerald-300">
-                  {formatPKR(plData.netProfit)}
+                <span className={`text-2xl sm:text-3xl font-black ${plData.netProfit === null ? 'text-amber-900' : 'text-emerald-300'}`}>
+                  {plData.netProfit === null ? 'Pending cost reconciliation' : formatPKR(plData.netProfit)}
                 </span>
               </div>
             </div>
@@ -267,7 +267,7 @@ export default function ReportsPage() {
       {/* TAB 2: CASH FLOW STATEMENT */}
       {activeTab === 'cashflow' && (
         <div className="space-y-4">
-          {isCfLoading ? (
+          {isCfError ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">Cash flow report failed to load: {cfError instanceof Error ? cfError.message : 'Check the connection.'}<button onClick={() => retryCf()} className="ml-3 underline">Retry</button></div> : isCfLoading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <div className="w-8 h-8 border-4 border-brand-fabric border-t-transparent rounded-full animate-spin" />
               <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Generating Cash Flow Statement...</p>

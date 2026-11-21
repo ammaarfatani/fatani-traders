@@ -29,7 +29,10 @@ export class PurchaseService {
 
   private static async generateLotNumber(): Promise<string> {
     const today = new Date();
-    const prefix = `LOT-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const dateParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit' }).formatToParts(today);
+    const year = dateParts.find(part => part.type === 'year')?.value || String(today.getUTCFullYear());
+    const month = dateParts.find(part => part.type === 'month')?.value || String(today.getUTCMonth() + 1).padStart(2, '0');
+    const prefix = `LOT-${year}${month}`;
     const lots = await prisma.purchaseLot.findMany({
       where: {
         lotNumber: {
@@ -74,16 +77,24 @@ export class PurchaseService {
     notes?: string;
     userId?: string;
   }) {
+    const replay = data.purchaseNumber?.trim() ? await this.findIdenticalPurchaseRequest(data) : null;
+    if (replay) return replay;
+
     let attempts = 0;
     while (attempts < 3) {
       try {
         attempts++;
         return await this.executeCreatePurchase(data);
       } catch (err: any) {
+        if (err?.code === 'P2002' && data.purchaseNumber?.trim()) {
+          const replay = await this.findIdenticalPurchaseRequest(data);
+          if (replay) return replay;
+        }
         if (
           (err.message?.includes('write conflict') ||
             err.message?.includes('deadlock') ||
-            err.message?.includes('TransientTransactionError')) &&
+            err.message?.includes('TransientTransactionError') ||
+            err?.code === 'P2002') &&
           attempts < 3
         ) {
           await new Promise((res) => setTimeout(res, 50 * attempts));
@@ -93,6 +104,60 @@ export class PurchaseService {
       }
     }
     throw new AppError('Purchase creation failed after retries', 500);
+  }
+
+  private static async findIdenticalPurchaseRequest(data: {
+    fabricName?: string;
+    supplierId?: string | null;
+    purchaseDate?: string | Date;
+    purchaseNumber?: string;
+    invoiceRefNumber?: string;
+    weightKg: number;
+    weightGrams?: number;
+    purchaseRatePerKg: number;
+    expenses?: Array<{ category:string; customName?:string; amount:number; isCapitalized?:boolean }>;
+    supplierPaymentAmount?: number;
+    paymentAccountId?: string | null;
+    notes?: string;
+  }) {
+    if (!data.purchaseNumber?.trim()) return null;
+    const existing = await prisma.purchase.findUnique({
+      where: { purchaseNumber: data.purchaseNumber.trim() },
+      include: { lots: { include: { product: true } }, expenses: true, payments: { include: { account: true } } },
+    });
+    if (!existing) return null;
+
+    const expectedGrams = kgAndGramsToGrams(data.weightKg, data.weightGrams || 0);
+    const expectedCost = calculateLandedCost(expectedGrams, data.purchaseRatePerKg, data.expenses || []);
+    const lot = existing.lots[0];
+    const normalizeExpenses = (rows: Array<{category:string;customName?:string|null;amount:number;isCapitalized?:boolean}>) => rows
+      .filter((row) => row.amount > 0)
+      .map((row) => `${row.category}|${row.customName || ''}|${roundMoney(row.amount)}|${row.isCapitalized !== false}`)
+      .sort();
+    const requestedExpenses = normalizeExpenses(data.expenses || []);
+    const savedExpenses = normalizeExpenses(existing.expenses);
+    const requestedDate = data.purchaseDate ? new Date(data.purchaseDate).getTime() : null;
+    const paymentTotal = roundMoney(existing.payments.reduce((sum, payment) => sum + payment.amount, 0));
+    const paymentAccountsMatch = existing.payments.every((payment) => payment.accountId === (data.paymentAccountId || null));
+    const isSameRequest = Boolean(lot)
+      && existing.supplierId === (data.supplierId || null)
+      && existing.invoiceRefNumber === (data.invoiceRefNumber || null)
+      && existing.notes === (data.notes || null)
+      && (requestedDate === null || existing.purchaseDate.getTime() === requestedDate)
+      && existing.baseCost === expectedCost.basePurchaseCost
+      && existing.totalExpenses === expectedCost.totalAdditionalExpenses
+      && existing.totalLandedCost === expectedCost.totalLandedCost
+      && existing.paidAmount === roundMoney(data.supplierPaymentAmount || 0)
+      && lot.purchasedGrams === expectedGrams
+      && lot.purchaseRatePerKg === data.purchaseRatePerKg
+      && lot.product.name.toLowerCase() === (data.fabricName || '').trim().toLowerCase()
+      && JSON.stringify(requestedExpenses) === JSON.stringify(savedExpenses)
+      && paymentTotal === roundMoney(data.supplierPaymentAmount || 0)
+      && paymentAccountsMatch;
+    if (!isSameRequest) {
+      throw new AppError('This purchase number is already in use by a different request. Refresh purchase numbering and review Purchase History before retrying.', 409);
+    }
+    return { purchase: existing, lot, landedCost: expectedCost, product: lot.product, idempotentReplay: true };
   }
 
   static async resolveOrCreateProduct(fabricName: string, client: any = prisma) {

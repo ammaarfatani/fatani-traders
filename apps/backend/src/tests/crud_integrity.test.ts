@@ -22,6 +22,78 @@ async function sold() {
 }
 
 describe('Edit/delete integrity regressions in isolated local database',()=>{
+  it('replays an identical purchase submission by purchase number without duplicating inventory or payments',async()=>{
+    const request={purchaseNumber:`PUR-IDEMP-${Date.now()}`,fabricName:'Idempotent request fabric',weightKg:2,purchaseRatePerKg:400,supplierPaymentAmount:150};
+    const first=await Purchases.createPurchase(request);
+    const second=await Purchases.createPurchase(request);
+    expect(second.purchase.id).toBe(first.purchase.id);
+    expect(second.lot.id).toBe(first.lot.id);
+    expect(await prisma.purchase.count({where:{purchaseNumber:request.purchaseNumber}})).toBe(1);
+    expect(await prisma.purchaseLot.count({where:{purchaseId:first.purchase.id}})).toBe(1);
+    expect(await prisma.payment.count({where:{purchaseId:first.purchase.id}})).toBe(1);
+    await expect(Purchases.createPurchase({...request,fabricName:'Different request under same number'})).rejects.toThrow(/already in use/);
+    expect(await prisma.purchase.count({where:{purchaseNumber:request.purchaseNumber}})).toBe(1);
+    expect(await prisma.purchaseLot.count({where:{purchaseId:first.purchase.id}})).toBe(1);
+  });
+  it('returns purchase and sale list values with their summaries while including purchases without suppliers',async()=>{
+    const p=await Purchases.createPurchase({fabricName:`Unknown supplier list ${Date.now()}`,weightKg:1,purchaseRatePerKg:250});
+    const customer=await Customers.createCustomer({name:`Sales list buyer ${Date.now()}`,phone:`03${String(Date.now()).slice(-9)}`});
+    const saleResult=await Sales.createSale({customerId:customer.id,items:[{lotId:p.lot.id,weightKg:0.5,ratePerKg:400}]});
+    const purchaseResponse=await Purchases.getPurchases(1,100);
+    const saleResponse=await Sales.getSales(1,100);
+    expect(purchaseResponse.purchases.some((row:any)=>row.id===p.purchase.id)).toBe(true);
+    expect(purchaseResponse.summary.totalPurchases).toBeGreaterThanOrEqual(250);
+    expect(saleResponse.sales.some((row:any)=>row.id===saleResult.sale.id)).toBe(true);
+    expect(saleResponse.summary.totalSales).toBeGreaterThanOrEqual(200);
+  });
+  it('replays an identical sale submission without deducting stock or recording its immediate receipt twice',async()=>{
+    const p=await Purchases.createPurchase({fabricName:`Idempotent sale lot ${Date.now()}`,weightKg:2,purchaseRatePerKg:400});
+    const customer=await Customers.createCustomer({name:`Idempotent sale buyer ${Date.now()}`,phone:`03${String(Date.now()).slice(-9)}`});
+    const invoiceNumber=await Sales.generateInvoiceNumber();
+    const request={invoiceNumber,customerId:customer.id,invoiceDate:'2026-11-22T00:00:00.000Z',items:[{lotId:p.lot.id,weightKg:1,ratePerKg:600}],discount:50,immediatePayment:100};
+    const first=await Sales.createSale(request);
+    const second=await Sales.createSale(request);
+    expect(second.sale.id).toBe(first.sale.id);
+    expect(await prisma.sale.count({where:{invoiceNumber}})).toBe(1);
+    expect(await prisma.saleItem.count({where:{saleId:first.sale.id}})).toBe(1);
+    expect(await prisma.payment.count({where:{allocations:{some:{saleId:first.sale.id}}}})).toBe(1);
+    expect((await prisma.purchaseLot.findUniqueOrThrow({where:{id:p.lot.id}})).availableGrams).toBe(1000);
+    await expect(Sales.createSale({...request,discount:0})).rejects.toThrow(/already in use/);
+    expect((await prisma.purchaseLot.findUniqueOrThrow({where:{id:p.lot.id}})).availableGrams).toBe(1000);
+  });
+  it('groups operating expenses by Pakistan business date and reports category totals',async()=>{
+    const category=await Expenses.createCategory(`Daily group ${Date.now()}`);
+    await Expenses.createOperatingExpense({categoryId:category.id,title:'After-midnight Pakistan expense',amount:125,date:'2026-11-21T20:30:00.000Z',isPaid:false});
+    const result=await Expenses.getOperatingExpenseAnalytics('2026-11-22','2026-11-22',category.id);
+    expect(result.timezone).toBe('Asia/Karachi');
+    expect(result.days).toHaveLength(1);
+    expect(result.days[0].date).toBe('2026-11-22');
+    expect(result.days[0].total).toBe(125);
+    expect(result.categoryTotals[0].amount).toBe(125);
+  });
+  it('reconciles profit, discount, COGS, receipts, operating expense, and remaining stock from saved transactions',async()=>{
+    const before=await ReportService.getProfitLoss();
+    const p=await Purchases.createPurchase({fabricName:`P&L lot ${Date.now()}`,weightKg:2,purchaseRatePerKg:400});
+    const customer=await Customers.createCustomer({name:`P&L customer ${Date.now()}`,phone:`03${String(Date.now()).slice(-9)}`});
+    await Sales.createSale({customerId:customer.id,items:[{lotId:p.lot.id,weightKg:1,ratePerKg:600}],discount:50,immediatePayment:100});
+    const category=await Expenses.createCategory(`P&L expense ${Date.now()}`);
+    await Expenses.createOperatingExpense({categoryId:category.id,title:'P&L overhead',amount:30,date:new Date(),isPaid:false});
+    const after=await ReportService.getProfitLoss();
+    expect(after.revenue.grossSales-before.revenue.grossSales).toBe(600);
+    expect(after.revenue.discounts-before.revenue.discounts).toBe(50);
+    expect(after.revenue.netSales-before.revenue.netSales).toBe(550);
+    expect(after.costOfGoodsSold.grossCogs-before.costOfGoodsSold.grossCogs).toBe(400);
+    expect(after.grossProfit).not.toBeNull();
+    expect(before.grossProfit).not.toBeNull();
+    expect(after.grossProfit!-before.grossProfit!).toBe(150);
+    expect(after.operatingExpenses.total-before.operatingExpenses.total).toBe(30);
+    expect(after.netProfit).not.toBeNull();
+    expect(before.netProfit).not.toBeNull();
+    expect(after.netProfit!-before.netProfit!).toBe(120);
+    expect(after.cashAndBalances.paymentsReceived-before.cashAndBalances.paymentsReceived).toBe(100);
+    expect(after.inventory.currentQuantityKg-before.inventory.currentQuantityKg).toBe(1);
+    expect(after.inventory.currentValuation-before.inventory.currentValuation).toBe(400);
+  });
   it('preserves signed stock adjustments when purchase weight changes',async()=>{
     const p=await purchase();
     const a=await Inventory.adjustStock({lotId:p.lot.id,gramsChange:-1000,reason:'Damaged stock',date:new Date()});

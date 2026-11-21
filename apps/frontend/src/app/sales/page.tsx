@@ -39,15 +39,15 @@ export default function SalesHistoryPage() {
     setDeletingSale(null);
   };
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['sales', page, search],
     queryFn: () =>
-      api.get<any>(
+      api.getEnvelope<any>(
         `/sales?page=${page}&limit=50${search ? `&search=${encodeURIComponent(search)}` : ''}`
       ),
   });
 
-  const salesList = data?.data || data?.sales || [];
+  const salesList = Array.isArray(data?.data) ? data.data : Array.isArray(data?.sales) ? data.sales : [];
   const summary = data?.summary || {
     totalSales: salesList.reduce((sum: number, s: any) => sum + (s.grandTotal || 0), 0),
     totalPaid: salesList.reduce((sum: number, s: any) => sum + (s.paidAmount || 0), 0),
@@ -91,13 +91,20 @@ export default function SalesHistoryPage() {
       </div>
 
       {/* Sales Summary Banner */}
+      {isError && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <p className="font-semibold">Sales history could not be loaded.</p>
+          <p className="mt-1">{error instanceof Error ? error.message : 'Check your connection and try again.'}</p>
+          <button type="button" onClick={() => refetch()} className="mt-3 rounded-lg bg-red-700 px-3 py-2 font-semibold text-white">Retry</button>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
         <div className="bg-brand-deep text-white p-5 rounded-2xl shadow-subtle">
           <span className="text-[11px] font-bold uppercase tracking-wider text-brand-light/90 block mb-1">
             Total Sales
           </span>
           <p className="text-2xl sm:text-3xl font-extrabold text-white">
-            {formatPKR(summary.totalSales || 0)}
+            {isError ? 'Unavailable' : formatPKR(summary.totalSales || 0)}
           </p>
           <p className="text-xs text-brand-light/70 mt-1">Cumulative invoice gross amount</p>
         </div>
@@ -107,7 +114,7 @@ export default function SalesHistoryPage() {
             Payment Received
           </span>
           <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700">
-            {formatPKR(summary.totalPaid || 0)}
+            {isError ? 'Unavailable' : formatPKR(summary.totalPaid || 0)}
           </p>
           <p className="text-xs text-gray-500 mt-1">Total collected customer payments</p>
         </div>
@@ -117,7 +124,7 @@ export default function SalesHistoryPage() {
             Remaining Receivable
           </span>
           <p className="text-2xl sm:text-3xl font-extrabold text-red-600">
-            {formatPKR(summary.totalBalance || 0)}
+            {isError ? 'Unavailable' : formatPKR(summary.totalBalance || 0)}
           </p>
           <p className="text-xs text-gray-500 mt-1">Customer balance to be collected</p>
         </div>
@@ -164,7 +171,7 @@ export default function SalesHistoryPage() {
       </div>
 
       {/* Sales Invoices List */}
-      {isLoading ? (
+      {isError ? null : isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <div className="w-8 h-8 border-4 border-brand-fabric border-t-transparent rounded-full animate-spin" />
           <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">

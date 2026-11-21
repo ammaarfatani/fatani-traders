@@ -1,17 +1,32 @@
 import { prisma } from '../lib/prisma';
 import { roundMoney, gramsToKg } from '@fatani/shared';
 
+const karachiDateKey = (date: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(date);
+const shiftKarachiDate = (key: string, days: number) => {
+  const date = new Date(`${key}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+const karachiDateStart = (key: string) => new Date(`${key}T00:00:00+05:00`);
+const shiftKarachiMonth = (key: string, months: number) => {
+  const date = new Date(`${key.slice(0, 7)}-01T12:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return date.toISOString().slice(0, 7) + '-01';
+};
+
 export class ReportService {
   static async getDashboard() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const todayKey = karachiDateKey(new Date());
+    const tomorrowKey = shiftKarachiDate(todayKey, 1);
+    const todayStart = karachiDateStart(todayKey);
+    const tomorrowStart = karachiDateStart(tomorrowKey);
+    const firstDayOfMonth = karachiDateStart(`${todayKey.slice(0, 7)}-01`);
+    const nextMonthStart = karachiDateStart(`${shiftKarachiDate(`${todayKey.slice(0, 7)}-01`, 31).slice(0, 7)}-01`);
 
     // 1. Today's sales
     const todaySales = await prisma.sale.findMany({
       where: {
-        invoiceDate: { gte: today },
+        invoiceDate: { gte: todayStart, lt: tomorrowStart },
       },
       include: { items: true },
     });
@@ -23,16 +38,24 @@ export class ReportService {
       (sum, s) => sum + s.items.reduce((iSum, item) => iSum + item.grams, 0),
       0
     );
+    const todayCogs = roundMoney(todaySales.reduce((sum, sale) => sum + sale.totalCogs, 0));
 
     // 2. Today's payments received
     const todayPayments = await prisma.payment.aggregate({
       where: {
         type: 'CUSTOMER_PAYMENT',
-        paymentDate: { gte: today },
+        paymentDate: { gte: todayStart, lt: tomorrowStart },
       },
       _sum: { amount: true },
     });
     const todayPaymentsReceived = roundMoney(todayPayments._sum.amount || 0);
+    const [todayExpenseAgg, todayReturns, todayMissingCostSales] = await Promise.all([
+      prisma.expense.aggregate({ where: { date: { gte: todayStart, lt: tomorrowStart } }, _sum: { amount: true } }),
+      prisma.salesReturn.aggregate({ where: { returnDate: { gte: todayStart, lt: tomorrowStart } }, _sum: { totalRefundAmount: true, totalCogsReversed: true } }),
+      prisma.sale.count({ where: { invoiceDate: { gte: todayStart, lt: tomorrowStart }, grandTotal: { gt: 0 }, totalCogs: { lte: 0 } } }),
+    ]);
+    const todayOperatingExpenses = roundMoney(todayExpenseAgg._sum.amount || 0);
+    const todayGrossProfit = todayMissingCostSales > 0 ? null : roundMoney(todaySalesAmount - (todayReturns._sum.totalRefundAmount || 0) - todayCogs + (todayReturns._sum.totalCogsReversed || 0));
 
     // 3. Receivables & Payables
     const [customerReceivables, supplierPayables] = await Promise.all([
@@ -75,19 +98,20 @@ export class ReportService {
     totalInventoryValuation = roundMoney(totalInventoryValuation);
 
     // 5. Month P&L (Accrual)
-    const [monthSales, monthReturns, monthExpenses] = await Promise.all([
+    const [monthSales, monthReturns, monthExpenses, monthMissingCostSales] = await Promise.all([
       prisma.sale.aggregate({
-        where: { invoiceDate: { gte: firstDayOfMonth } },
+        where: { invoiceDate: { gte: firstDayOfMonth, lt: nextMonthStart } },
         _sum: { grandTotal: true, totalCogs: true, grossProfit: true },
       }),
       prisma.salesReturn.aggregate({
-        where: { returnDate: { gte: firstDayOfMonth } },
+        where: { returnDate: { gte: firstDayOfMonth, lt: nextMonthStart } },
         _sum: { totalRefundAmount: true, totalCogsReversed: true },
       }),
       prisma.expense.aggregate({
-        where: { date: { gte: firstDayOfMonth } },
+        where: { date: { gte: firstDayOfMonth, lt: nextMonthStart } },
         _sum: { amount: true },
       }),
+      prisma.sale.count({ where: { invoiceDate: { gte: firstDayOfMonth, lt: nextMonthStart }, grandTotal: { gt: 0 }, totalCogs: { lte: 0 } } }),
     ]);
 
     const netSalesMonth = roundMoney(
@@ -96,9 +120,9 @@ export class ReportService {
     const cogsMonth = roundMoney(
       (monthSales._sum.totalCogs || 0) - (monthReturns._sum.totalCogsReversed || 0)
     );
-    const monthGrossProfit = roundMoney(netSalesMonth - cogsMonth);
+    const monthGrossProfit = monthMissingCostSales > 0 ? null : roundMoney(netSalesMonth - cogsMonth);
     const monthOperatingExpenses = roundMoney(monthExpenses._sum.amount || 0);
-    const monthNetProfit = roundMoney(monthGrossProfit - monthOperatingExpenses);
+    const monthNetProfit = monthGrossProfit === null ? null : roundMoney(monthGrossProfit - monthOperatingExpenses);
 
     // 6. All-Time Totals: Purchases, Sales, Payments Received, Payments Paid
     const [allPurchasesAgg, allSalesAgg, allReceivedAgg, allPaidAgg, allLotsWeightAgg] = await Promise.all([
@@ -202,31 +226,38 @@ export class ReportService {
     const monthlyTrends: Array<{
       month: string;
       sales: number;
+      expenses: number;
       cogs: number;
       grossProfit: number;
+      netProfit: number | null;
     }> = [];
 
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const nextMonth = new Date(today.getFullYear(), today.getMonth() - i + 1, 1);
-      const monthName = d.toLocaleString('en-US', { month: 'short', year: '2-digit' });
+      const monthFirst = shiftKarachiMonth(todayKey, -i);
+      const monthStart = karachiDateStart(monthFirst);
+      const nextMonthKey = shiftKarachiMonth(monthFirst, 1);
+      const nextMonth = karachiDateStart(nextMonthKey);
+      const monthName = new Intl.DateTimeFormat('en-US', { month: 'short', year: '2-digit', timeZone: 'Asia/Karachi' }).format(monthStart);
 
-      const mSales = await prisma.sale.aggregate({
-        where: {
-          invoiceDate: { gte: d, lt: nextMonth },
-        },
-        _sum: { grandTotal: true, totalCogs: true, grossProfit: true },
-      });
+      const [mSales, mReturns, mExpenses, mMissingCostSales] = await Promise.all([
+        prisma.sale.aggregate({ where: { invoiceDate: { gte: monthStart, lt: nextMonth } }, _sum: { grandTotal: true, totalCogs: true } }),
+        prisma.salesReturn.aggregate({ where: { returnDate: { gte: monthStart, lt: nextMonth } }, _sum: { totalRefundAmount: true, totalCogsReversed: true } }),
+        prisma.expense.aggregate({ where: { date: { gte: monthStart, lt: nextMonth } }, _sum: { amount: true } }),
+        prisma.sale.count({ where: { invoiceDate: { gte: monthStart, lt: nextMonth }, grandTotal: { gt: 0 }, totalCogs: { lte: 0 } } }),
+      ]);
 
-      const salesVal = roundMoney(mSales._sum.grandTotal || 0);
-      const cogsVal = roundMoney(mSales._sum.totalCogs || 0);
+      const salesVal = roundMoney((mSales._sum.grandTotal || 0) - (mReturns._sum.totalRefundAmount || 0));
+      const cogsVal = roundMoney((mSales._sum.totalCogs || 0) - (mReturns._sum.totalCogsReversed || 0));
+      const expensesVal = roundMoney(mExpenses._sum.amount || 0);
       const gpVal = roundMoney(salesVal - cogsVal);
 
       monthlyTrends.push({
         month: monthName,
         sales: salesVal,
+        expenses: expensesVal,
         cogs: cogsVal,
         grossProfit: gpVal,
+        netProfit: mMissingCostSales > 0 ? null : roundMoney(gpVal - expensesVal),
       });
     }
 
@@ -239,6 +270,9 @@ export class ReportService {
       totalPaymentsReceived,
       totalPaymentsPaid,
       todaySales: todaySalesAmount,
+      todayGrossProfit,
+      todayProfitCostDataComplete: todayMissingCostSales === 0,
+      todayOperatingExpenses,
       todaySalesKg: gramsToKg(todaySalesGrams),
       todayPaymentsReceived,
       totalReceivables,
@@ -247,7 +281,9 @@ export class ReportService {
       totalAvailableStockKg: gramsToKg(totalAvailableStockGrams),
       totalInventoryValuation,
       monthGrossProfit,
+      monthSalesRevenue: netSalesMonth,
       monthNetProfit,
+      monthProfitCostDataComplete: monthMissingCostSales === 0,
       monthOperatingExpenses,
       recentSales,
       recentPurchases,
@@ -277,10 +313,18 @@ export class ReportService {
       whereExpense.date = dateFilter;
     }
 
-    const [salesAgg, returnsAgg, expensesByCategory] = await Promise.all([
+    const wherePayment: any = {};
+    if (startDate || endDate) {
+      const dateFilter: any = {};
+      if (startDate) dateFilter.gte = new Date(startDate);
+      if (endDate) dateFilter.lte = new Date(endDate);
+      wherePayment.paymentDate = dateFilter;
+    }
+
+    const [salesAgg, returnsAgg, expensesByCategory, paymentsReceivedAgg, paymentsPaidAgg, receivableAgg, payableAgg, inventoryLots, missingCostSales] = await Promise.all([
       prisma.sale.aggregate({
         where: whereSale,
-        _sum: { grandTotal: true, totalCogs: true, grossProfit: true },
+        _sum: { subtotal: true, discount: true, grandTotal: true, totalCogs: true },
       }),
       prisma.salesReturn.aggregate({
         where: whereReturn,
@@ -291,6 +335,12 @@ export class ReportService {
         where: whereExpense,
         _sum: { amount: true },
       }),
+      prisma.payment.aggregate({ where: { ...wherePayment, type: 'CUSTOMER_PAYMENT' }, _sum: { amount: true } }),
+      prisma.payment.aggregate({ where: { ...wherePayment, type: { in: ['SUPPLIER_PAYMENT', 'PURCHASE_PAYMENT'] } }, _sum: { amount: true } }),
+      prisma.customer.aggregate({ where: { currentBalance: { gt: 0 } }, _sum: { currentBalance: true } }),
+      prisma.purchase.aggregate({ where: { balanceAmount: { gt: 0 } }, _sum: { balanceAmount: true } }),
+      prisma.purchaseLot.findMany({ where: { status: 'ACTIVE', availableGrams: { gt: 0 } }, select: { availableGrams: true, landedCostPerKg: true } }),
+      prisma.sale.count({ where: { ...whereSale, grandTotal: { gt: 0 }, totalCogs: { lte: 0 } } }),
     ]);
 
     // Populate category names
@@ -300,15 +350,17 @@ export class ReportService {
     });
     const categoryNameMap = new Map(categories.map((c) => [c.id, c.name]));
 
-    const grossSales = roundMoney(salesAgg._sum.grandTotal || 0);
+    const grossSales = roundMoney(salesAgg._sum.subtotal || 0);
+    const discounts = roundMoney(salesAgg._sum.discount || 0);
     const salesReturns = roundMoney(returnsAgg._sum.totalRefundAmount || 0);
-    const netSales = roundMoney(grossSales - salesReturns);
+    const netSales = roundMoney(grossSales - discounts - salesReturns);
 
     const grossCogs = roundMoney(salesAgg._sum.totalCogs || 0);
     const cogsReversed = roundMoney(returnsAgg._sum.totalCogsReversed || 0);
     const netCogs = roundMoney(grossCogs - cogsReversed);
 
-    const grossProfit = roundMoney(netSales - netCogs);
+    const calculatedGrossProfit = roundMoney(netSales - netCogs);
+    const grossProfit = missingCostSales > 0 ? null : calculatedGrossProfit;
 
     const operatingExpenseItems = expensesByCategory.map((e) => ({
       categoryId: e.categoryId,
@@ -320,11 +372,14 @@ export class ReportService {
       operatingExpenseItems.reduce((sum, item) => sum + item.amount, 0)
     );
 
-    const netProfit = roundMoney(grossProfit - totalOperatingExpenses);
+    const netProfit = grossProfit === null ? null : roundMoney(grossProfit - totalOperatingExpenses);
+    const currentInventoryQuantityKg = roundMoney(inventoryLots.reduce((sum, lot) => sum + lot.availableGrams, 0) / 1000);
+    const currentInventoryValuation = roundMoney(inventoryLots.reduce((sum, lot) => sum + (lot.availableGrams / 1000) * lot.landedCostPerKg, 0));
 
     return {
       revenue: {
         grossSales,
+        discounts,
         salesReturns,
         netSales,
       },
@@ -339,6 +394,15 @@ export class ReportService {
         total: totalOperatingExpenses,
       },
       netProfit,
+      profitComplete: missingCostSales === 0,
+      reconciliationWarnings: missingCostSales > 0 ? [`${missingCostSales} sale(s) in this period have no positive stored lot COGS. Profit is withheld until cost history is reconciled.`] : [],
+      cashAndBalances: {
+        paymentsReceived: roundMoney(paymentsReceivedAgg._sum.amount || 0),
+        paymentsPaid: roundMoney(paymentsPaidAgg._sum.amount || 0),
+        customerReceivables: roundMoney(receivableAgg._sum.currentBalance || 0),
+        purchasePayables: roundMoney(payableAgg._sum.balanceAmount || 0),
+      },
+      inventory: { currentQuantityKg: currentInventoryQuantityKg, currentValuation: currentInventoryValuation },
       dateRange: {
         startDate: startDate ? new Date(startDate).toISOString() : null,
         endDate: endDate ? new Date(endDate).toISOString() : null,

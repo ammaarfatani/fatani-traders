@@ -6,6 +6,7 @@ import { BrandLogo } from '@/components/brand/BrandLogo';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatPKR, formatWeight } from '@fatani/shared';
+import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   TrendingUp,
   Package,
@@ -271,6 +272,36 @@ export default function DashboardPage() {
           </p>
         </Link>
       </div>
+
+      <section className="space-y-3">
+        <h2 className="px-1 text-sm font-bold uppercase tracking-wider text-gray-500">Daily and Monthly Performance</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          {[
+            ['Today’s Sales', dashboard.todaySales, '/sales', 'text-emerald-700'],
+            ['Today’s Expenses', dashboard.todayOperatingExpenses, '/expenses', 'text-red-700'],
+            ['Today’s Gross Profit', dashboard.todayProfitCostDataComplete ? dashboard.todayGrossProfit : null, '/reports', 'text-brand-fabric'],
+            ['This Month’s Sales', dashboard.monthSalesRevenue, '/sales', 'text-emerald-700'],
+            ['This Month’s Expenses', dashboard.monthOperatingExpenses, '/expenses', 'text-red-700'],
+            ['This Month’s Net Profit / Loss', dashboard.monthProfitCostDataComplete ? dashboard.monthNetProfit : null, '/reports', dashboard.monthNetProfit !== null && dashboard.monthNetProfit < 0 ? 'text-red-700' : 'text-emerald-700'],
+          ].map(([label, amount, href, color]) => <Link key={String(label)} href={String(href)} className="rounded-2xl border border-brand-muted bg-white p-4 shadow-sm hover:border-brand-fabric"><span className="block text-[10px] font-bold uppercase tracking-wide text-gray-500">{label}</span><span className={`mt-1 block text-lg font-extrabold ${color}`}>{amount === null ? 'Cost review needed' : formatPKR(Number(amount || 0))}</span></Link>)}
+        </div>
+        <div className="rounded-2xl border border-brand-muted bg-white p-4 sm:p-5">
+          <h3 className="mb-3 text-sm font-bold text-brand-charcoal">Monthly Sales, Operating Expenses & Net Profit</h3>
+          <div className="h-72 w-full" role="img" aria-label="Six month chart of sales, operating expenses, and net profit">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={dashboard.monthlyTrends || []} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={(value) => value >= 1000000 ? `${(value / 1000000).toFixed(1)}m` : value >= 1000 ? `${Math.round(value / 1000)}k` : String(value)} />
+                <Tooltip formatter={(value: number) => formatPKR(value)} />
+                <Bar dataKey="sales" name="Net Sales" fill="#0f766e" radius={[4,4,0,0]} />
+                <Bar dataKey="expenses" name="Operating Expenses" fill="#dc2626" radius={[4,4,0,0]} />
+                <Line dataKey="netProfit" name="Net Profit / Loss" stroke="#d97706" strokeWidth={2} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </section>
 
       {/* 4 Recent Activity Sections (Recent Sales, Purchases, Payments Received, Payments Paid) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

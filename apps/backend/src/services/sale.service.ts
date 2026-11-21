@@ -11,9 +11,12 @@ import {
 import { logAudit } from '../middleware/audit';
 
 export class SaleService {
-  private static async generateInvoiceNumber(): Promise<string> {
+  static async generateInvoiceNumber(): Promise<string> {
     const today = new Date();
-    const prefix = `INV-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const dateParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit' }).formatToParts(today);
+    const year = dateParts.find(part => part.type === 'year')?.value || String(today.getUTCFullYear());
+    const month = dateParts.find(part => part.type === 'month')?.value || String(today.getUTCMonth() + 1).padStart(2, '0');
+    const prefix = `INV-${year}${month}`;
     const sales = await prisma.sale.findMany({
       where: {
         invoiceNumber: {
@@ -33,7 +36,55 @@ export class SaleService {
     return `${prefix}-${String(maxNum + 1).padStart(4, '0')}`;
   }
 
+  private static async findIdenticalSaleRequest(data: {
+    invoiceNumber?: string;
+    customerId: string;
+    invoiceDate?: string | Date;
+    items: Array<{ lotId:string; weightKg?:number; weightGrams?:number; totalGrams?:number; sellingRatePerKg?:number; ratePerKg?:number }>;
+    discount?: number;
+    immediatePayment?: number;
+    notes?: string;
+  }, invoiceNumber: string) {
+    const existing = await prisma.sale.findUnique({
+      where: { invoiceNumber },
+      include: { customer: true, items: true, paymentAllocations: { include: { payment: true } } },
+    });
+    if (!existing) return null;
+    const requestedItems = data.items.map(item => ({
+      lotId: item.lotId,
+      grams: item.totalGrams !== undefined && item.totalGrams > 0 ? item.totalGrams : (item.weightKg || 0) * 1000 + (item.weightGrams || 0),
+      ratePerKg: item.sellingRatePerKg !== undefined && item.sellingRatePerKg > 0 ? item.sellingRatePerKg : (item.ratePerKg || 0),
+    })).sort((a,b)=>a.lotId.localeCompare(b.lotId) || a.grams-b.grams || a.ratePerKg-b.ratePerKg);
+    const savedItems = existing.items.map(item=>({lotId:item.lotId,grams:item.grams,ratePerKg:item.ratePerKg})).sort((a,b)=>a.lotId.localeCompare(b.lotId) || a.grams-b.grams || a.ratePerKg-b.ratePerKg);
+    const subtotal = roundMoney(requestedItems.reduce((sum,item)=>sum+calculateLineTotal(item.grams,item.ratePerKg),0));
+    const discount = Math.max(0,data.discount || 0);
+    const grandTotal = calculateDiscountedTotal(subtotal,discount);
+    const requestedDate = data.invoiceDate ? new Date(data.invoiceDate).getTime() : null;
+    const immediateNotes = `Immediate payment for invoice ${invoiceNumber}`;
+    const savedImmediate = roundMoney(existing.paymentAllocations
+      .filter(allocation=>allocation.payment.notes===immediateNotes)
+      .reduce((sum,allocation)=>sum+allocation.amount,0));
+    const isSameRequest = existing.customerId===data.customerId
+      && existing.subtotal===subtotal
+      && existing.discount===discount
+      && existing.grandTotal===grandTotal
+      && existing.notes===(data.notes ?? null)
+      && (requestedDate===null || existing.invoiceDate.getTime()===requestedDate)
+      && JSON.stringify(savedItems)===JSON.stringify(requestedItems)
+      && savedImmediate===roundMoney(data.immediatePayment || 0);
+    if (!isSameRequest) throw new AppError('This invoice number is already in use by a different request. Refresh invoice numbering and review Sales History before retrying.',409);
+    const snapshot:any=existing.invoiceSnapshot;
+    return {
+      sale: existing,
+      items: existing.items,
+      previousBalance: snapshot?.customer?.previousBalance ?? existing.customer.currentBalance,
+      newBalance: existing.customer.currentBalance,
+      idempotentReplay: true,
+    };
+  }
+
   static async createSale(data: {
+    invoiceNumber?: string;
     customerId: string;
     invoiceDate?: string | Date;
     items: Array<{
@@ -50,7 +101,16 @@ export class SaleService {
     paymentAccountId?: string | null;
     notes?: string;
     userId?: string;
-  }) {
+    uniqueRetryAttempt?: number;
+  }): Promise<any> {
+    if (!data.items || data.items.length === 0) {
+      throw new AppError('At least one fabric item is required for sale', 400);
+    }
+
+    const invoiceNumber = data.invoiceNumber?.trim() || await this.generateInvoiceNumber();
+    const invoiceReplay = await this.findIdenticalSaleRequest(data, invoiceNumber);
+    if (invoiceReplay) return invoiceReplay;
+
     // 1. Verify customer
     const customer = await prisma.customer.findUnique({
       where: { id: data.customerId },
@@ -66,8 +126,6 @@ export class SaleService {
     const immediatePay = Math.max(0, data.immediatePayment || 0);
     const invoiceDateObj = data.invoiceDate ? new Date(data.invoiceDate) : new Date();
 
-    const invoiceNumber = await this.generateInvoiceNumber();
-
     // 2. Fetch business settings & active invoice template for snapshot
     const [settings, template] = await Promise.all([
       prisma.businessSettings.findFirst(),
@@ -75,7 +133,9 @@ export class SaleService {
     ]);
 
     // 3. Execute in MongoDB multi-document ACID transaction
-    const result = await prisma.$transaction(async (tx) => {
+    let result: any;
+    try {
+      result = await prisma.$transaction(async (tx) => {
       let subtotal = 0;
       let totalCogs = 0;
       const processedItems: Array<{
@@ -366,7 +426,18 @@ export class SaleService {
         previousBalance: customer.currentBalance,
         newBalance: finalCustomerBalance,
       };
-    });
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        const replay = await this.findIdenticalSaleRequest(data, invoiceNumber);
+        if (replay) return replay;
+        if ((data.uniqueRetryAttempt || 0) < 2) {
+          await new Promise(resolve => setTimeout(resolve, 40 * ((data.uniqueRetryAttempt || 0) + 1)));
+          return this.createSale({ ...data, invoiceNumber, uniqueRetryAttempt: (data.uniqueRetryAttempt || 0) + 1 });
+        }
+      }
+      throw err;
+    }
 
     await logAudit(
       data.userId,

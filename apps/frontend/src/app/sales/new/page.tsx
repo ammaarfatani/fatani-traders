@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
   kgAndGramsToGrams,
@@ -35,6 +35,7 @@ interface SaleItemRow {
 
 export default function NewSalePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const [customerId, setCustomerId] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
@@ -43,6 +44,11 @@ export default function NewSalePage() {
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { data: nextInvoiceData } = useQuery({
+    queryKey: ['nextSaleNumber'],
+    queryFn: () => api.get<{nextNumber:string}>('/sales/next-number'),
+  });
 
   // Initial Item Row
   const [items, setItems] = useState<SaleItemRow[]>([
@@ -170,6 +176,11 @@ export default function NewSalePage() {
     e.preventDefault();
     setError(null);
 
+    if (!nextInvoiceData?.nextNumber) {
+      setError('Invoice numbering is not ready. Please wait briefly and submit again.');
+      return;
+    }
+
     if (!customerId) {
       setError('Please select a customer');
       return;
@@ -199,6 +210,7 @@ export default function NewSalePage() {
 
     try {
       const payload = {
+        invoiceNumber: nextInvoiceData?.nextNumber,
         customerId,
         invoiceDate,
         items: calculatedItems.map((it) => ({
@@ -216,9 +228,20 @@ export default function NewSalePage() {
       };
 
       const res = await api.post<any>('/sales', payload);
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey:['sales']}),
+        queryClient.invalidateQueries({queryKey:['availableLots']}),
+        queryClient.invalidateQueries({queryKey:['inventoryLots']}),
+        queryClient.invalidateQueries({queryKey:['dashboard']}),
+        queryClient.invalidateQueries({queryKey:['customers']}),
+        queryClient.invalidateQueries({queryKey:['payments']}),
+        queryClient.invalidateQueries({queryKey:['profit-loss']}),
+        queryClient.invalidateQueries({queryKey:['cash-flow']}),
+        queryClient.invalidateQueries({queryKey:['nextSaleNumber']}),
+      ]);
       router.push(`/sales/${res.sale.id}`);
     } catch (err: any) {
-      setError(err.message || 'Failed to create sale invoice');
+      setError(`${err.message || 'Failed to create sale invoice'}${err.correlationId ? ` (Reference: ${err.correlationId})` : ''}`);
       setIsSubmitting(false);
     }
   };
@@ -235,7 +258,7 @@ export default function NewSalePage() {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">New Sales Invoice</h1>
+          <div className="flex flex-wrap items-center gap-2"><h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">New Sales Invoice</h1><span className="rounded-full border border-brand-muted bg-brand-light px-2.5 py-1 font-mono text-xs font-bold text-brand-fabric">{nextInvoiceData?.nextNumber || 'Preparing…'}</span></div>
           <p className="text-xs text-slate-500">Sell fabric by weight from specific lots</p>
         </div>
       </div>

@@ -4,6 +4,76 @@ import { roundMoney } from '@fatani/shared';
 import { logAudit } from '../middleware/audit';
 
 export class ExpenseService {
+  private static businessDayStart(dateKey: string) {
+    const start = new Date(`${dateKey}T00:00:00+05:00`);
+    if (Number.isNaN(start.getTime())) throw new AppError('Invalid business date', 400);
+    return start;
+  }
+
+  static async getOperatingExpenseAnalytics(startDate?: string, endDate?: string, categoryId?: string) {
+    const businessDate = (date: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(date);
+    const shiftDay = (key: string, amount: number) => {
+      const value = new Date(`${key}T12:00:00Z`);
+      value.setUTCDate(value.getUTCDate() + amount);
+      return value.toISOString().slice(0, 10);
+    };
+    const today = businessDate(new Date());
+    const selectedStart = startDate || `${today.slice(0, 7)}-01`;
+    const selectedEnd = endDate || today;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedStart) || !/^\d{4}-\d{2}-\d{2}$/.test(selectedEnd) || selectedStart > selectedEnd) {
+      throw new AppError('Select a valid expense date range', 400);
+    }
+    const daysBetween = Math.ceil((this.businessDayStart(selectedEnd).getTime() - this.businessDayStart(selectedStart).getTime()) / 86400000) + 1;
+    if (daysBetween > 366) throw new AppError('Expense analytics date range cannot exceed 366 days', 400);
+    const start = this.businessDayStart(selectedStart);
+    const end = this.businessDayStart(shiftDay(selectedEnd, 1));
+    const selectedWhere: any = { date: { gte: start, lt: end } };
+    if (categoryId) selectedWhere.categoryId = categoryId;
+
+    const yesterday = shiftDay(today, -1);
+    const weekday = new Date(`${today}T12:00:00+05:00`).getUTCDay();
+    const weekStart = shiftDay(today, -((weekday + 6) % 7));
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const monthLast = shiftDay(shiftDay(monthStart, 31).slice(0, 7) + '-01', -1);
+    const periodTotal = (from: string, through: string) => prisma.expense.aggregate({
+      where: { ...(categoryId ? { categoryId } : {}), date: { gte: this.businessDayStart(from), lt: this.businessDayStart(shiftDay(through, 1)) } },
+      _sum: { amount: true },
+    });
+    const [todayAgg, yesterdayAgg, weekAgg, monthAgg, selectedAgg, rows, categoryAgg] = await Promise.all([
+      periodTotal(today, today), periodTotal(yesterday, yesterday), periodTotal(weekStart, today),
+      periodTotal(monthStart, monthLast), prisma.expense.aggregate({ where: selectedWhere, _sum: { amount: true } }),
+      prisma.expense.findMany({ where: selectedWhere, select: { date: true, amount: true, categoryId: true } }),
+      prisma.expense.groupBy({ by: ['categoryId'], where: selectedWhere, _sum: { amount: true }, _count: { _all: true } }),
+    ]);
+    const categoryIds = Array.from(new Set([...rows.map(row => row.categoryId), ...categoryAgg.map(row => row.categoryId)]));
+    const categories = await prisma.expenseCategory.findMany({ where: { id: { in: categoryIds } }, select: { id: true, name: true } });
+    const names = new Map(categories.map(category => [category.id, category.name]));
+    const days = new Map<string, { date: string; total: number; count: number; categories: Map<string, number> }>();
+    for (const row of rows) {
+      const key = businessDate(row.date);
+      const group = days.get(key) || { date: key, total: 0, count: 0, categories: new Map<string, number>() };
+      group.total = roundMoney(group.total + row.amount);
+      group.count++;
+      group.categories.set(row.categoryId, roundMoney((group.categories.get(row.categoryId) || 0) + row.amount));
+      days.set(key, group);
+    }
+    const categoryTotals = categoryAgg.map(row => ({ categoryId: row.categoryId, categoryName: names.get(row.categoryId) || 'Other', amount: roundMoney(row._sum.amount || 0), count: row._count._all }));
+    return {
+      timezone: 'Asia/Karachi',
+      dateRange: { startDate: selectedStart, endDate: selectedEnd },
+      summaries: {
+        today: roundMoney(todayAgg._sum.amount || 0), yesterday: roundMoney(yesterdayAgg._sum.amount || 0),
+        thisWeek: roundMoney(weekAgg._sum.amount || 0), thisMonth: roundMoney(monthAgg._sum.amount || 0),
+        selectedPeriod: roundMoney(selectedAgg._sum.amount || 0),
+      },
+      categoryTotals,
+      days: Array.from(days.values()).map(group => ({
+        date: group.date, total: group.total, count: group.count,
+        categories: Array.from(group.categories.entries()).map(([id, amount]) => ({ categoryId: id, categoryName: names.get(id) || 'Other', amount })),
+      })).sort((a, b) => b.date.localeCompare(a.date)),
+    };
+  }
+
   private static async generateExpenseNumber(): Promise<string> {
     const today = new Date();
     const prefix = `EXP-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`;

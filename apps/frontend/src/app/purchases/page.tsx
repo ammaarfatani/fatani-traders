@@ -46,8 +46,8 @@ export default function PurchasesHistoryPage() {
     queryKey: ['suppliers-list'],
     queryFn: () => api.get<any>('/suppliers?limit=100'),
   });
-  const suppliers = suppliersData?.data || suppliersData?.suppliers || [];
-  const supplierOptions = suppliersData?.data || suppliersData?.suppliers || [];
+  const supplierOptions = Array.isArray(suppliersData) ? suppliersData : suppliersData?.data || suppliersData?.suppliers || [];
+  const suppliers = supplierOptions;
 
   // Build query string
   const queryParams = new URLSearchParams({
@@ -62,12 +62,12 @@ export default function PurchasesHistoryPage() {
     queryParams.set('supplierId', supplierFilter);
   }
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['purchases', page, search, statusFilter, supplierFilter],
-    queryFn: () => api.get<any>(`/purchases?${queryParams.toString()}`),
+    queryFn: () => api.getEnvelope<any>(`/purchases?${queryParams.toString()}`),
   });
 
-  const purchasesList = data?.data || data?.purchases || [];
+  const purchasesList = Array.isArray(data?.data) ? data.data : Array.isArray(data?.purchases) ? data.purchases : [];
   const summary = data?.summary || {
     totalPurchases: purchasesList.reduce((sum: number, p: any) => sum + (p.totalLandedCost || 0), 0),
     totalPaid: purchasesList.reduce((sum: number, p: any) => sum + (p.paidAmount || 0), 0),
@@ -109,7 +109,7 @@ export default function PurchasesHistoryPage() {
             Total Purchases
           </span>
           <p className="text-xl sm:text-2xl font-extrabold text-white">
-            {formatPKR(summary.totalPurchases || 0)}
+            {isError ? 'Unavailable' : formatPKR(summary.totalPurchases || 0)}
           </p>
           <p className="text-[11px] text-brand-light/70 mt-1">Total landed inventory cost</p>
         </div>
@@ -119,7 +119,7 @@ export default function PurchasesHistoryPage() {
             Total Paid
           </span>
           <p className="text-xl sm:text-2xl font-extrabold text-emerald-700">
-            {formatPKR(summary.totalPaid || 0)}
+            {isError ? 'Unavailable' : formatPKR(summary.totalPaid || 0)}
           </p>
           <p className="text-[11px] text-gray-500 mt-1">Payments made for purchases</p>
         </div>
@@ -129,7 +129,7 @@ export default function PurchasesHistoryPage() {
             Remaining Payable
           </span>
           <p className="text-xl sm:text-2xl font-extrabold text-amber-700">
-            {formatPKR(summary.totalBalance || 0)}
+            {isError ? 'Unavailable' : formatPKR(summary.totalBalance || 0)}
           </p>
           <p className="text-[11px] text-gray-500 mt-1">Outstanding purchase balance</p>
         </div>
@@ -139,7 +139,7 @@ export default function PurchasesHistoryPage() {
             Total Weight
           </span>
           <p className="text-xl sm:text-2xl font-extrabold text-brand-charcoal">
-            {((summary.totalWeightKg || 0)).toLocaleString('en-US', {
+            {isError ? 'Unavailable' : (summary.totalWeightKg || 0).toLocaleString('en-US', {
               minimumFractionDigits: 0,
               maximumFractionDigits: 3,
             })}{' '}
@@ -217,7 +217,13 @@ export default function PurchasesHistoryPage() {
       </div>
 
       {/* Purchases List */}
-      {isLoading ? (
+      {isError ? (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <p className="font-semibold">Purchase history could not be loaded.</p>
+          <p className="mt-1">{error instanceof Error ? error.message : 'Check your connection and try again.'}</p>
+          <button type="button" onClick={() => refetch()} className="mt-3 rounded-lg bg-red-700 px-3 py-2 font-semibold text-white">Retry</button>
+        </div>
+      ) : isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <div className="w-8 h-8 border-4 border-brand-fabric border-t-transparent rounded-full animate-spin" />
           <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">
