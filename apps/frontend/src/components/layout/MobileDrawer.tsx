@@ -2,7 +2,6 @@
 
 import React from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   X,
@@ -21,6 +20,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { BrandLogo } from '@/components/brand/BrandLogo';
 
 export default function MobileDrawer({
   isOpen,
@@ -59,16 +59,8 @@ export default function MobileDrawer({
       {/* Drawer Panel */}
       <div className="relative ml-auto w-4/5 max-w-xs bg-brand-deep text-white h-full flex flex-col shadow-2xl z-10 animate-in slide-in-from-right duration-200 border-l border-white/10">
         <div className="p-4 border-b border-white/10 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 shrink-0 flex items-center justify-center">
-              <Image
-                src="/logo.png"
-                alt="Fatani Fabrics Logo"
-                width={40}
-                height={40}
-                className="w-full h-full object-contain"
-              />
-            </div>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <BrandLogo />
             <div>
               <h2 className="font-bold text-sm tracking-wide text-white leading-tight font-sans">
                 FATANI TRADERS

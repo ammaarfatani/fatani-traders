@@ -42,15 +42,26 @@ export default function InventoryReportPage() {
       ),
   });
 
+  const lotRows: any[] = Array.isArray(data) ? data : data?.lots || [];
+
   const { data: invReport } = useQuery({
     queryKey: ['inventoryReportSummary'],
     queryFn: () => api.get<any>('/reports/inventory'),
+  });
+
+  const { data: availableLots = [], isLoading: isLoadingAvailableLots, isError: availableLotsFailed } = useQuery({
+    queryKey: ['availableLotsForAdjustment'],
+    queryFn: () => api.get<any[]>('/inventory/lots'),
+    enabled: isAdjustModalOpen,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const adjustStockMutation = useMutation({
     mutationFn: (payload: any) => api.post('/inventory/adjust', payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventoryLots'] });
+      queryClient.invalidateQueries({ queryKey: ['availableLotsForAdjustment'] });
       queryClient.invalidateQueries({ queryKey: ['inventoryReportSummary'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setIsAdjustModalOpen(false);
@@ -169,13 +180,13 @@ export default function InventoryReportPage() {
           <div className="w-8 h-8 border-4 border-brand-fabric border-t-transparent rounded-full animate-spin" />
           <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Loading Inventory Lots...</p>
         </div>
-      ) : data?.lots?.length === 0 ? (
+      ) : lotRows.length === 0 ? (
         <div className="bg-white p-8 rounded-2xl border border-brand-muted text-center">
           <p className="text-sm font-medium text-gray-500">No inventory lots found.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {data?.lots?.map((lot: any) => (
+          {lotRows.map((lot: any) => (
             <Link
               key={lot.id}
               href={`/inventory/lots/${lot.id}`}
@@ -224,12 +235,12 @@ export default function InventoryReportPage() {
 
       {/* Stock Adjustment Modal */}
       {isAdjustModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-deep/70 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-brand-muted animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto overscroll-contain bg-brand-deep/70 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm sm:items-center sm:p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="stock-adjustment-title" className="my-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-md touch-pan-y overflow-y-auto overscroll-contain rounded-3xl border border-brand-muted bg-white p-4 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-6">
             <div className="flex items-center justify-between pb-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="w-5 h-5 text-brand-fabric" />
-                <h3 className="font-extrabold text-base text-brand-charcoal">Stock Adjustment / Audit</h3>
+                <h3 id="stock-adjustment-title" className="font-extrabold text-base text-brand-charcoal">Stock Adjustment / Audit</h3>
               </div>
               <button
                 onClick={() => setIsAdjustModalOpen(false)}
@@ -254,15 +265,21 @@ export default function InventoryReportPage() {
                   required
                   value={selectedLotId}
                   onChange={(e) => setSelectedLotId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-brand-muted text-xs text-brand-charcoal focus:ring-2 focus:ring-brand-fabric outline-none bg-white"
+                  disabled={isLoadingAvailableLots || availableLots.length === 0}
+                  className="relative z-[61] block min-h-12 w-full appearance-auto rounded-xl border border-brand-muted bg-white px-3.5 py-2.5 text-base text-brand-charcoal outline-none focus:ring-2 focus:ring-brand-fabric"
                 >
-                  <option value="">-- Choose Lot to Adjust --</option>
-                  {data?.lots?.map((l: any) => (
+                  <option value="">{isLoadingAvailableLots ? 'Loading eligible purchase lots…' : '-- Choose Lot to Adjust --'}</option>
+                  {availableLots.map((l: any) => (
                     <option key={l.id} value={l.id}>
-                      {l.lotNumber} — {l.product?.name} (Avail: {formatWeight(l.availableGrams)})
+                      {l.product?.name || 'Fabric'} — {l.lotNumber} — {formatWeight(l.availableGrams)} available
                     </option>
                   ))}
                 </select>
+                {availableLotsFailed ? (
+                  <p role="alert" className="mt-2 text-xs font-medium text-red-700">Couldn’t load purchase lots. Close and reopen this form to retry.</p>
+                ) : !isLoadingAvailableLots && availableLots.length === 0 ? (
+                  <p className="mt-2 text-xs text-gray-600">No active purchase lots have available stock to adjust.</p>
+                ) : null}
               </div>
 
               <div>

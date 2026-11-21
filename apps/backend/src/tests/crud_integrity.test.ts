@@ -8,6 +8,7 @@ import { ProductService as Products } from '../services/product.service';
 import { ExpenseService as Expenses } from '../services/expense.service';
 import { PaymentService as Payments } from '../services/payment.service';
 import { CustomerService as Customers } from '../services/customer.service';
+import { ReportService } from '../services/report.service';
 import { requireAuth } from '../middleware/auth';
 import { CustomerSchema, StockAdjustmentSchema } from '@fatani/shared';
 
@@ -30,6 +31,38 @@ describe('Edit/delete integrity regressions in isolated local database',()=>{
     expect((await Inventory.getLotById(p.lot.id)).availableGrams).toBe(10000);
     await Inventory.changeAdjustment(a.adjustment.id,null);
     expect((await Inventory.getLotById(p.lot.id)).availableGrams).toBe(12000);
+  });
+  it('reconciles all-time purchase total, active inventory valuation, lot options, and deleted purchases',async()=>{
+    const before=await ReportService.getDashboard();
+    const inventoryBefore=await ReportService.getInventoryReport();
+    const p=await Purchases.createPurchase({fabricName:'Dashboard reconciliation fabric',weightKg:10,purchaseRatePerKg:500,expenses:[{category:'Transport',amount:500,isCapitalized:true}]});
+    const afterPurchase=await ReportService.getDashboard();
+    const inventoryAfterPurchase=await ReportService.getInventoryReport();
+    expect(afterPurchase.totalPurchases-before.totalPurchases).toBe(5500);
+    expect(afterPurchase.totalAvailableStockKg-before.totalAvailableStockKg).toBe(10);
+    expect(afterPurchase.totalInventoryValuation-before.totalInventoryValuation).toBe(5500);
+    expect(inventoryAfterPurchase.totalLots-inventoryBefore.totalLots).toBe(1);
+    expect(inventoryAfterPurchase.totalAvailableKg-inventoryBefore.totalAvailableKg).toBe(10);
+    expect(inventoryAfterPurchase.totalInventoryValuation-inventoryBefore.totalInventoryValuation).toBe(5500);
+    const eligibleLots=await Inventory.getAvailableLots();
+    expect(eligibleLots.some(lot=>lot.id===p.lot.id && lot.availableKg===10)).toBe(true);
+    const adjustment=await Inventory.adjustStock({lotId:p.lot.id,gramsChange:-2000,reason:'Dashboard calculation regression',date:new Date()});
+    const afterAdjustment=await ReportService.getDashboard();
+    const inventoryAfterAdjustment=await ReportService.getInventoryReport();
+    expect(afterAdjustment.totalPurchases).toBe(afterPurchase.totalPurchases);
+    expect(afterAdjustment.totalAvailableStockKg-before.totalAvailableStockKg).toBe(8);
+    expect(afterAdjustment.totalInventoryValuation-before.totalInventoryValuation).toBe(4400);
+    expect(inventoryAfterAdjustment.totalInventoryValuation-inventoryBefore.totalInventoryValuation).toBe(4400);
+    await Inventory.changeAdjustment(adjustment.adjustment.id,null);
+    await Purchases.deletePurchase(p.purchase.id);
+    const afterDelete=await ReportService.getDashboard();
+    const inventoryAfterDelete=await ReportService.getInventoryReport();
+    expect(afterDelete.totalPurchases).toBe(before.totalPurchases);
+    expect(afterDelete.totalAvailableStockKg).toBe(before.totalAvailableStockKg);
+    expect(afterDelete.totalInventoryValuation).toBe(before.totalInventoryValuation);
+    expect(inventoryAfterDelete.totalLots).toBe(inventoryBefore.totalLots);
+    expect(inventoryAfterDelete.totalAvailableKg).toBe(inventoryBefore.totalAvailableKg);
+    expect(inventoryAfterDelete.totalInventoryValuation).toBe(inventoryBefore.totalInventoryValuation);
   });
   it('blocks reversal of added stock once consumed',async()=>{
     const p=await purchase();

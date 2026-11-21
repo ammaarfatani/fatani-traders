@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
@@ -22,6 +21,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { BrandLogo } from '@/components/brand/BrandLogo';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -65,16 +65,7 @@ export default function Sidebar() {
       {/* Brand Header */}
       <div className="h-20 border-b border-white/10 flex items-center justify-between px-4 relative">
         <Link href="/" className="flex items-center gap-3 overflow-hidden">
-          <div className="w-11 h-11 shrink-0 flex items-center justify-center">
-            <Image
-              src="/logo.png"
-              alt="Fatani Fabrics Logo"
-              width={44}
-              height={44}
-              className="w-full h-full object-contain"
-              priority
-            />
-          </div>
+          <BrandLogo />
           {!isCollapsed && (
             <div className="truncate">
               <h1 className="font-bold text-base leading-tight tracking-wider text-white uppercase font-sans">

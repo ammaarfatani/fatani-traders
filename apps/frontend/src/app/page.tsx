@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { BrandLogo } from '@/components/brand/BrandLogo';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatPKR, formatWeight } from '@fatani/shared';
@@ -35,15 +35,7 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <div className="w-14 h-14 shrink-0 flex items-center justify-center">
-          <Image
-            src="/logo.png"
-            alt="Fatani Fabrics Logo"
-            width={48}
-            height={48}
-            className="w-full h-full object-contain animate-pulse"
-          />
-        </div>
+          <BrandLogo size="large" />
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 border-2 border-brand-fabric border-t-transparent rounded-full animate-spin" />
           <p className="text-xs font-semibold uppercase tracking-wider text-brand-charcoal">
@@ -65,18 +57,10 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* Top Welcome & Quick Actions Header */}
-      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 shrink-0 flex items-center justify-center">
-            <Image
-              src="/logo.png"
-              alt="Fatani Fabrics Logo"
-              width={52}
-              height={52}
-              className="w-full h-full object-contain"
-            />
-          </div>
-          <div>
+      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-brand-muted shadow-subtle flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <BrandLogo size="large" />
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-extrabold text-brand-charcoal tracking-tight font-sans">
                 Fatani Traders
@@ -92,10 +76,10 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick Action Buttons */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+        <div className="grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto lg:items-center lg:gap-2 lg:pb-0">
           <Link
             href="/sales/new"
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-deep hover:bg-brand-fabric text-white font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition shrink-0"
+            className="flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-brand-deep px-2 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-fabric active:scale-95 sm:px-3 sm:text-sm md:px-4"
           >
             <Receipt className="w-4 h-4" />
             <span>+ New Sale</span>
@@ -103,7 +87,7 @@ export default function DashboardPage() {
 
           <Link
             href="/purchases/new"
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-fabric hover:bg-brand-accent text-white font-semibold text-xs sm:text-sm shadow-sm active:scale-95 transition shrink-0"
+            className="flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-brand-fabric px-2 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-accent active:scale-95 sm:px-3 sm:text-sm md:px-4"
           >
             <ShoppingCart className="w-4 h-4" />
             <span>+ New Purchase</span>
@@ -111,7 +95,7 @@ export default function DashboardPage() {
 
           <Link
             href="/payments"
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-brand-light hover:bg-brand-muted text-brand-charcoal font-semibold text-xs sm:text-sm transition shrink-0 border border-brand-muted"
+            className="col-span-2 flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-brand-muted bg-brand-light px-3 py-2.5 text-xs font-semibold text-brand-charcoal transition hover:bg-brand-muted sm:text-sm lg:col-span-1 lg:px-3.5"
           >
             <Banknote className="w-4 h-4 text-emerald-700" />
             <span>Payments</span>

@@ -415,13 +415,12 @@ export class ReportService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const activeStockLots = lots.filter((lot) => lot.status === 'ACTIVE' && lot.availableGrams > 0);
     let totalAvailableGrams = 0;
     let totalValuation = 0;
 
     const items = lots.map((lot) => {
-      totalAvailableGrams += lot.availableGrams;
       const val = roundMoney((lot.availableGrams / 1000) * lot.landedCostPerKg);
-      totalValuation = roundMoney(totalValuation + val);
 
       return {
         id: lot.id,
@@ -441,8 +440,13 @@ export class ReportService {
       };
     });
 
+    for (const lot of activeStockLots) {
+      totalAvailableGrams += lot.availableGrams;
+      totalValuation = roundMoney(totalValuation + (lot.availableGrams / 1000) * lot.landedCostPerKg);
+    }
+
     return {
-      totalLots: lots.length,
+      totalLots: activeStockLots.length,
       totalAvailableKg: gramsToKg(totalAvailableGrams),
       totalInventoryValuation: totalValuation,
       lots: items,
