@@ -8,7 +8,7 @@ export function BrandLogo({ size = 'default' }: { size?: 'default' | 'large' }) 
       className={`relative inline-flex ${dimensions} shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F7F7F4] p-0.5 shadow-sm ring-1 ring-white/30`}
     >
       <Image
-        src="/logo-tight.png"
+        src="/fatani-logo.png"
         alt="Fatani Fabrics"
         width={42}
         height={48}

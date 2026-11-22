@@ -59,7 +59,12 @@ export default function NewPurchasePage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   // Queries
-  const { data: nextNumberData } = useQuery({
+  const {
+    data: nextNumberData,
+    isFetching: isNextNumberFetching,
+    isError: isNextNumberError,
+    refetch: retryNextNumber,
+  } = useQuery({
     queryKey: ['nextPurchaseNumber'],
     queryFn: () => api.get<{ nextNumber: string }>('/purchases/next-number'),
   });
@@ -70,7 +75,7 @@ export default function NewPurchasePage() {
   });
 
   const suppliers = suppliersData || [];
-  const autoInvoiceNumber = nextNumberData?.nextNumber || 'PUR-000001';
+  const autoInvoiceNumber = nextNumberData?.nextNumber || '';
 
   // Calculations
   const numericKg = Number(weightKg) || 0;
@@ -167,6 +172,11 @@ export default function NewPurchasePage() {
     e.preventDefault();
     setFormError(null);
 
+    if (isNextNumberFetching || !autoInvoiceNumber) {
+      setFormError('A valid purchase number is not ready yet. Please wait or retry before saving.');
+      return;
+    }
+
     if (!fabricName.trim()) {
       setFormError('Fabric Name is required (e.g. Lucky Diet, Cotton, Lawn).');
       return;
@@ -245,6 +255,15 @@ export default function NewPurchasePage() {
           Cancel
         </Link>
       </div>
+
+      {isNextNumberError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <span>Could not load the next purchase number. Retry before saving this purchase.</span>
+          <button type="button" onClick={() => void retryNextNumber()} className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-semibold hover:bg-amber-100">
+            Retry
+          </button>
+        </div>
+      )}
 
       {formError && (
         <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-xs sm:text-sm font-semibold flex items-center gap-2">
@@ -598,13 +617,18 @@ export default function NewPurchasePage() {
 
           <button
             type="submit"
-            disabled={purchaseMutation.isPending}
+            disabled={purchaseMutation.isPending || isNextNumberFetching || !autoInvoiceNumber}
             className="flex items-center gap-2 px-7 py-3 rounded-xl bg-brand-deep hover:bg-brand-fabric text-white font-bold text-sm shadow-md active:scale-95 transition disabled:opacity-50"
           >
             {purchaseMutation.isPending ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <span>Saving Purchase...</span>
+              </>
+            ) : isNextNumberFetching || !autoInvoiceNumber ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Loading purchase number…</span>
               </>
             ) : (
               <>
